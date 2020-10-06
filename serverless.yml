@@ -1,0 +1,157 @@
+service: burst-compute
+
+plugins:
+  - serverless-pseudo-parameters
+
+custom:
+  version: 2.0.0
+  tracing: false
+  debug: true
+  jobTable: janelia-neuronbridge-job-batches-table-${self:provider.stage}
+  maxParallelization: 10000
+  StepfunctionRolearn: `arn:aws:iam::${ACCOUNT}:role/service-role/StatesExecutionRole-eu-west-1`,
+
+provider:
+  name: aws
+  region: ${opt:region, "us-east-1"}
+  stage: ${opt:stage, "dev"}
+  tags:
+    PROJECT: BurstCompute
+    VERSION: ${self:custom.version}
+    DEVELOPER: ${env:USER}
+  stackTags:
+    PROJECT: BurstCompute
+    VERSION: ${self:custom.version}
+    DEVELOPER: ${env:USER}
+    STAGE: ${self:provider.stage}
+  tracing:
+    lambda: ${self:custom.tracing}
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - dynamodb:DescribeStream
+        - dynamodb:DescribeTable
+        - dynamodb:GetRecords
+        - dynamodb:ListStreams
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:UpdateTable
+        - dynamodb:Query
+      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobTable}"
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+        - lambda:InvokeAsync
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - states:StartExecution
+      Resource: "*"
+
+package:
+  individually: true
+  exclude:
+    - src/test/**
+  include:
+    - src/main/nodejs/**
+
+functions:
+
+  dispatch:
+    runtime: nodejs12.x
+    handler: src/main/nodejs/dispatch.dispatchHandler
+    memorySize: 256
+    # 5 minute timeout
+    timeout: 300
+    environment:
+      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
+      MAX_PARALLELISM: ${self:custom.maxParallelization}
+      DEBUG: ${self:custom.debug}
+
+  monitor:
+    runtime: nodejs12.x
+    handler: src/main/nodejs/monitor.monitorHandler
+    memorySize: 128
+    # 10 second timeout
+    timeout: 10
+    environment:
+      JOB_TIMEOUT_SECS: ${self:custom.cdsTimeoutInSeconds}
+      JOB_TABLE_NAME: ${self:custom.jobTable}
+      DEBUG: ${self:custom.debug}
+
+stepFunctions:
+
+  stateMachines:
+    searchMonitorStateMachine:
+      id: SearchMonitorStateMachine
+      name: searchMonitorStateMachine-${self:service}-${self:provider.stage}
+      definition:
+        Comment: "Monitors a parallel Color Depth Search and notifies the user upon completion"
+        StartAt: Monitor
+        States:
+          Monitor:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [monitor, Arn]
+            Retry:
+              - ErrorEquals: 
+                - Lambda.TooManyRequestsException
+                IntervalSeconds: 1
+                MaxAttempts: 100
+            Next: IsTimedOut
+          IsTimedOut:
+            Type: Choice
+            Choices:
+              - Variable: "$.timedOut"
+                BooleanEquals: true
+                Next: Reduce
+            Default: AreWeDoneYet
+          AreWeDoneYet:
+            Type: Choice
+            Choices:
+              - Variable: "$.completed"
+                BooleanEquals: true
+                Next: Reduce
+            Default: Wait
+          Wait:
+            Type: Wait
+            Seconds: 1
+            Next: Monitor
+          Reduce:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [searchReduce, Arn]
+            Next: EndState
+          EndState:
+            Type: Pass
+            End: true
+ 
+  validate: true # enable pre-deployment definition validation
+
+resources:
+
+  Outputs:
+    SearchMonitorStateMachine:
+      Description: The ARN of the state machine
+      Value:
+        Ref: SearchMonitorStateMachine
+
+  Resources:
+    JobTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+          - AttributeName: batchId
+            KeyType: RANGE
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: batchId
+            AttributeType: N
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:custom.jobTable}

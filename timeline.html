@@ -1,0 +1,218 @@
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<style>
+body {
+  font-family: Arial, sans-serif; 
+  font-size: 13;
+  height: 100%;
+  margin: 0;
+}
+.box {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+}
+.box .row.header {
+  flex: 0 1 auto;
+}
+.box .row.content {
+  flex: 1 1 auto;
+}
+.box .row.footer {
+  flex: 0 1 40px;
+}
+.tooltip {
+  padding: 5px;
+  font-size: 1.2em;
+}
+div#event {
+  font-family: monospace;
+  white-space: pre;
+}
+</style>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.js"
+        integrity="sha256-DrT5NfxfbHvMHux31Lkhxg42LY6of8TaYyK50jnxRnM="
+        crossorigin="anonymous"></script>
+
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+<script type="text/javascript">
+google.charts.load("current", {packages:["timeline"]});
+google.charts.setOnLoadCallback(init);
+
+var data = null
+
+function init() {
+  document.getElementById('files').addEventListener('change', handleFileSelect, false);
+}
+
+function handleFileSelect(evt) {
+  var files = evt.target.files;
+  if (files == null || files.length == 0) return;
+  var file = files[0];
+  var reader = new FileReader();
+  reader.onload = (function (theFile) {
+    return function (e) {
+      data = JSON.parse(e.target.result)
+      const inputStr = JSON.stringify(data.input, null, 2)
+      document.getElementById('event').innerHTML = inputStr
+      drawChart(data)
+    };
+  })(file);
+  reader.readAsText(file);
+}
+
+function drawChart(data) {
+
+  var container = document.getElementById('timeline');
+  var chart = new google.visualization.Timeline(container);
+  var dataTable = new google.visualization.DataTable();
+  dataTable.addColumn({ type: 'string', id: 'Category' });
+  dataTable.addColumn({ type: 'string', id: 'Name' });
+  dataTable.addColumn({ type: 'string', id: 'style', role: 'style' });
+  dataTable.addColumn({ type: 'string', role: 'tooltip' });
+  dataTable.addColumn({ type: 'string', role: 'url' });
+  dataTable.addColumn({ type: 'date', id: 'Start' });
+  dataTable.addColumn({ type: 'date', id: 'End' });
+
+  let statsMap = {}
+  let stateMachineEnd = null
+  for(const stage of data.stages) {
+    if (stage.name==="State Machine") {
+      stateMachineEnd = stage.end
+    }
+    else if (stage.stats) {
+      statsMap[stage.name] = stage.stats
+    }
+  }
+  // Clamp times to the state machine to avoid CloudWatch reporting inconsistencies
+  for(const stage of data.stages) {
+    if (stage.start < stateMachineEnd && stage.end > stateMachineEnd) {
+      stage.end = stateMachineEnd
+    }
+  }
+
+  const rows = []
+  for(const stage of data.stages) {
+    var start = new Date(stage.start)
+    var end = new Date(stage.end)
+    var durationMs = end.getTime() - start.getTime()
+
+    var color = '#80afff' // Neutral blue
+    if (statsMap[stage.category]) {
+      stats = statsMap[stage.category]
+      let residual = Math.abs(durationMs - stats.median)
+      if (residual < stats.std) {
+        color = '#71d46c' // Green
+      }
+      else if (residual < 2*stats.std) {
+        color = '#d4d46c' // Yellow
+      }
+      else {
+        color = '#d4766c' // Red
+      }
+    }
+    else if (stage.name.startsWith('Monitor')) {
+      color = '#478bff'
+    }
+    else if (stage.name.endsWith('Delay')) {
+      color = '#cfe1ff'
+    }
+
+    var statsHtml = ""
+
+    if (stage.report) {
+      if (stage.report.initDuration) 
+        statsHtml += '<br><b>Init Duration</b>: '+stage.report.initDuration
+      statsHtml += '<br><b>Duration</b>: '+stage.report.duration
+      statsHtml += '<br><b>Billed Duration</b>: '+stage.report.billedBuration
+      statsHtml += '<br><b>Memory Size</b>: '+stage.report.memorySize
+      statsHtml += '<br><b>Max Memory Used</b>: '+stage.report.maxMemoryUsed
+    }
+
+    if (stage.stats) {
+      mean = Math.round(stage.stats.mean)
+      median = Math.round(stage.stats.median)
+      min = Math.round(stage.stats.min)
+      max = Math.round(stage.stats.max)
+      std = Math.round(stage.stats.std)
+      statsHtml += '<br><b>Mean</b>: '+mean+' ms'
+      statsHtml += '<br><b>Median</b>: '+median+' ms'
+      statsHtml += '<br><b>Min</b>: '+min+' ms'
+      statsHtml += '<br><b>Max</b>: '+max+' ms'
+      statsHtml += '<br><b>Std</b>: '+std+' ms'
+    }
+
+    // Construct CloudWatch link
+    var link = null
+    if (stage.logGroupName) {
+      link = "https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/"+encodeURIComponent(stage.logGroupName)
+      if (stage.logStreamName) {
+        link+="/log-events/"+encodeURIComponent(stage.logStreamName)
+      }
+    }
+
+    // Construct tooltip
+    var tooltip = '<div class="tooltip">'+stage.name+'<br><b>CloudWatch Duration</b>: '+durationMs+' ms'+statsHtml+'</div>'
+
+    if (start > end) {
+      console.log('Invalid event: ',stage)
+    }
+    rows.push([stage.category, stage.name, color, tooltip, link, start, end])
+  }
+
+  dataTable.addRows(rows)
+
+  var options = {
+    backgroundColor: '#fff',
+    avoidOverlappingGridLines: true,
+
+  };
+
+  chart.draw(dataTable, options)
+
+  function selectHandler(e) {
+    const selected = chart.getSelection()[0]
+    const row = rows[selected.row]
+    const link = row[4]
+    if (link) {
+      window.open(link, '_blank');
+    }
+  }
+  google.visualization.events.addListener(chart, 'select', selectHandler);
+}
+
+// From https://stackoverflow.com/questions/8950761/google-chart-redraw-scale-on-window-resize
+$(window).resize(function() {
+    if(this.resizeTO) clearTimeout(this.resizeTO);
+    this.resizeTO = setTimeout(function() {
+        $(this).trigger('resizeEnd');
+    }, 500);
+});
+$(window).on('resizeEnd', function() {
+    if (data) drawChart(data);
+});
+
+</script>
+</head>
+<body>
+
+<div class="box">
+  <div class="row header">
+    <form>
+      Input JSON: <input type="file" id="files" accept=".json"/>
+    </form>
+    <div id="event"></div>
+  </div>
+  <div class="row content">
+    <div id="timeline" style="height: 100%"></div>
+  </div>
+  <div class="row footer">
+    <p></p>
+  </div>
+</div>
+
+
+</body>
+</html>

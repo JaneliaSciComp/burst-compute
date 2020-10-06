@@ -1,0 +1,32 @@
+{
+  "name": "burst-compute",
+  "description": "Burst computation engine for burst-parallel jobs on AWS",
+  "version": "0.1.0",
+  "license": "Janelia Open Source License",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JaneliaSciComp/burst-parallel"
+  },
+  "scripts": {
+    "sls": "sls",
+    "test": "jest",
+    "search": "AWS_SDK_LOAD_CONFIG=true DISABLE_XRAY=true node src/main/nodejs/search_client.js"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.720.0",
+    "mathjs": "^7.2.0",
+    "moment": "^2.25.3",
+    "stream": "0.0.2",
+    "uuid": "^8.2.0"
+  },
+  "devDependencies": {
+    "eslint": "^7.9.0",
+    "eslint-config-standard": "^14.1.1",
+    "eslint-plugin-import": "^2.22.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "jest": "^26.4.2",
+    "serverless": "^1.78.1"
+  }
+}
