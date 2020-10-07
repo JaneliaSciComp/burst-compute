@@ -1,15 +1,15 @@
 service: burst-compute
 
 plugins:
-  - serverless-pseudo-parameters
+  - serverless-step-functions
+  - serverless-plugin-package-json
 
 custom:
-  version: 2.0.0
+  version: ${pkgjson:version}
   tracing: false
-  debug: true
-  jobTable: janelia-neuronbridge-job-batches-table-${self:provider.stage}
-  maxParallelization: 10000
-  StepfunctionRolearn: `arn:aws:iam::${ACCOUNT}:role/service-role/StatesExecutionRole-eu-west-1`,
+  debug: "true"
+  tasksTable: ${self:service}-${self:provider.stage}-tasks
+  jobTimeoutInSeconds: "300"
 
 provider:
   name: aws
@@ -27,7 +27,7 @@ provider:
   tracing:
     lambda: ${self:custom.tracing}
   environment:
-    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -40,7 +40,7 @@ provider:
         - dynamodb:UpdateItem
         - dynamodb:UpdateTable
         - dynamodb:Query
-      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.jobTable}"
+      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
@@ -68,7 +68,8 @@ functions:
     timeout: 300
     environment:
       DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
-      MAX_PARALLELISM: ${self:custom.maxParallelization}
+      MONITOR_FUNCTION_NAME: ${self:resources.Outputs.MonitorLambdaFunction.Value}
+      STATE_MACHINE_NAME: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
       DEBUG: ${self:custom.debug}
 
   monitor:
@@ -78,24 +79,28 @@ functions:
     # 10 second timeout
     timeout: 10
     environment:
-      JOB_TIMEOUT_SECS: ${self:custom.cdsTimeoutInSeconds}
-      JOB_TABLE_NAME: ${self:custom.jobTable}
+      JOB_TIMEOUT_SECS: ${self:custom.jobTimeoutInSeconds}
+      JOB_TABLE_NAME: ${self:custom.tasksTable}
       DEBUG: ${self:custom.debug}
 
 stepFunctions:
-
+  validate: true # enable pre-deployment definition validation
   stateMachines:
-    searchMonitorStateMachine:
-      id: SearchMonitorStateMachine
-      name: searchMonitorStateMachine-${self:service}-${self:provider.stage}
+
+    jobLifecycleStateMachine:
+      id: JobLifecycleStateMachine
+      name: ${self:service}-${self:provider.stage}-lifecycle
       definition:
-        Comment: "Monitors a parallel Color Depth Search and notifies the user upon completion"
+        Comment: "Monitors a burst compute job and calls the reducer when all tasks are done"
         StartAt: Monitor
         States:
           Monitor:
             Type: Task
-            Resource:
-              Fn::GetAtt: [monitor, Arn]
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName.$: "$$.Execution.Input.monitorFunctionArn"
+              Payload.$: "$"
+            OutputPath: "$.Payload"
             Retry:
               - ErrorEquals: 
                 - Lambda.TooManyRequestsException
@@ -122,36 +127,41 @@ stepFunctions:
             Next: Monitor
           Reduce:
             Type: Task
-            Resource:
-              Fn::GetAtt: [searchReduce, Arn]
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName.$: "$$.Execution.Input.reduceFunctionArn"
+              Payload.$: "$"
+            OutputPath: "$.Payload"
             Next: EndState
           EndState:
             Type: Pass
             End: true
  
-  validate: true # enable pre-deployment definition validation
-
 resources:
 
   Outputs:
-    SearchMonitorStateMachine:
+    MonitorLambdaFunction:
+      Description: The ARN of the monitor function
+      Value:
+        Ref: MonitorLambdaFunction
+    JobLifecycleStateMachine:
       Description: The ARN of the state machine
       Value:
-        Ref: SearchMonitorStateMachine
+        Ref: JobLifecycleStateMachine
 
   Resources:
-    JobTable:
-      Type: "AWS::DynamoDB::Table"
+    TasksTable:
+      Type: AWS::DynamoDB::Table
       Properties:
+        TableName: ${self:custom.tasksTable}
         KeySchema:
-          - AttributeName: id
+          - AttributeName: jobId
             KeyType: HASH
           - AttributeName: batchId
             KeyType: RANGE
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: jobId
             AttributeType: S
           - AttributeName: batchId
             AttributeType: N
         BillingMode: PAY_PER_REQUEST
-        TableName: ${self:custom.jobTable}

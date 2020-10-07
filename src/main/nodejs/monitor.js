@@ -5,6 +5,7 @@ const moment = require('moment')
 
 const JOB_TIMEOUT_SECS = process.env.JOB_TIMEOUT_SECS
 const JOB_TABLE_NAME = process.env.JOB_TABLE_NAME
+
 var docClient = new AWS.DynamoDB.DocumentClient()
 
 exports.monitorHandler = async (event) =>  {
@@ -33,9 +34,9 @@ const monitorJob = async (jobParams) => {
         TableName: JOB_TABLE_NAME,
         ConsistentRead: true,
         Select: "COUNT",
-        KeyConditionExpression: 'id = :id',
+        KeyConditionExpression: 'jobId = :jobId',
         ExpressionAttributeValues: {
-            ':id': jobId
+            ':jobId': jobId
         },
     };
     console.log('Fetching result count: ', params)
