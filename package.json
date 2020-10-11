@@ -28,7 +28,7 @@
     "eslint-plugin-promise": "^4.2.1",
     "eslint-plugin-standard": "^4.0.1",
     "jest": "^26.4.2",
-    "serverless": "^2.4.0",
+    "serverless": "^2.5.0",
     "serverless-plugin-package-json": "^0.1.0",
     "serverless-step-functions": "^2.22.1"
   }
