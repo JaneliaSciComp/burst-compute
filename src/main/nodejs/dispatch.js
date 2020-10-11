@@ -2,9 +2,12 @@ const { v1: uuidv1 } = require('uuid');
 const AWS = require('aws-sdk');
 
 const DEBUG = !!process.env.DEBUG;
-const dispatchFunctionName = process.env.DISPATCH_FUNCTION_ARN;
-const monitorFunctionName = process.env.MONITOR_FUNCTION_ARN;
-const stateMachineName = process.env.STATE_MACHINE_NAME;
+const {
+  DISPATCH_FUNCTION_NAME,
+  MONITOR_FUNCTION_NAME,
+  STATE_MACHINE_ARN,
+  JOB_TIMEOUT_SECS,
+} = process.env;
 
 const DEFAULTS = {
   level: 0,
@@ -53,8 +56,10 @@ exports.dispatchHandler = async (event) => {
   console.log('Input event:', JSON.stringify(event));
 
   // User defined parameters
-  const { workerFunctionName } = event;
-  const { reduceFunctionName } = event;
+  const { workerFunctionName, reduceFunctionName, searchTimeoutSecs = JOB_TIMEOUT_SECS } = event;
+  const startIndex = parseInt(event.startIndex);
+  const endIndex = parseInt(event.endIndex);
+  let batchSize = parseInt(event.batchSize);
 
   // Parameters which have defaults
   const level = parseInt(event.level) || DEFAULTS.level;
@@ -62,15 +67,11 @@ exports.dispatchHandler = async (event) => {
   const jobParameters = event.jobParameters || DEFAULTS.jobParameters;
   const maxParallelism = event.maxParallelism || DEFAULTS.maxParallelism;
 
-  // Programmatic parameters. In the case of the root manager, these will be null initially
+  // Programmatic parameters. In the case of the root manager, these may be null initially
   // and then generated for later invocations.
-  let { jobId } = event;
-  let { monitorName } = event;
-  let batchSize = parseInt(event.batchSize);
+  let { jobId, monitorName } = event;
   let numBatches = parseInt(event.numBatches);
   let branchingFactor = parseInt(event.branchingFactor);
-  const startIndex = parseInt(event.startIndex);
-  const endIndex = parseInt(event.endIndex);
 
   if (level === 0) {
     // This next log statement is parsed by the analyzer. DO NOT CHANGE.
@@ -97,13 +98,16 @@ exports.dispatchHandler = async (event) => {
     const now = new Date();
     const monitorParams = {
       jobId,
+      jobParameters,
       numBatches,
+      searchTimeoutSecs,
       startTime: now.toISOString(),
-      monitorFunctionName,
+      monitorFunctionName: MONITOR_FUNCTION_NAME,
       reduceFunctionName,
     };
-
-    monitorName = await startStepFunction(stateMachineName, monitorParams, jobId);
+    console.log(`Starting state machine ${STATE_MACHINE_ARN}`);
+    monitorName = jobId;
+    await startStepFunction(STATE_MACHINE_ARN, monitorParams, monitorName);
   }
 
   // This next log statement is parsed by the analyzer. DO NOT CHANGE.
@@ -120,6 +124,9 @@ exports.dispatchHandler = async (event) => {
     numBatches,
     branchingFactor,
     monitorName,
+    workerFunctionName,
+    reduceFunctionName,
+    searchTimeoutSecs,
   };
 
   const invokePromises = [];
@@ -135,7 +142,7 @@ exports.dispatchHandler = async (event) => {
         endIndex: workerEnd,
         ...nextEvent,
       };
-      invokePromises.push(invokeAsync(dispatchFunctionName, params));
+      invokePromises.push(invokeAsync(DISPATCH_FUNCTION_NAME, params));
       console.log(`(Promise#${index}) Dispatched sub-dispatcher ${workerStart} - ${workerEnd}`);
       index += 1;
     }
@@ -170,5 +177,7 @@ exports.dispatchHandler = async (event) => {
   return {
     monitorName,
     jobId,
+    numBatches,
+    branchingFactor,
   };
 };

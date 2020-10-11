@@ -9,7 +9,7 @@ custom:
   tracing: false
   debug: "true"
   tasksTable: ${self:service}-${self:provider.stage}-tasks
-  jobTimeoutInSeconds: "300"
+  defaultJobTimeoutSecs: "60"
 
 provider:
   name: aws
@@ -67,10 +67,11 @@ functions:
     # 5 minute timeout
     timeout: 300
     environment:
-      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
-      MONITOR_FUNCTION_NAME: ${self:resources.Outputs.MonitorLambdaFunction.Value}
-      STATE_MACHINE_NAME: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
       DEBUG: ${self:custom.debug}
+      JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
+      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
+      MONITOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-monitor
+      STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
 
   monitor:
     runtime: nodejs12.x
@@ -79,9 +80,9 @@ functions:
     # 10 second timeout
     timeout: 10
     environment:
-      JOB_TIMEOUT_SECS: ${self:custom.jobTimeoutInSeconds}
-      JOB_TABLE_NAME: ${self:custom.tasksTable}
       DEBUG: ${self:custom.debug}
+      JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
+      JOB_TABLE_NAME: ${self:custom.tasksTable}
 
 stepFunctions:
   validate: true # enable pre-deployment definition validation
@@ -98,7 +99,7 @@ stepFunctions:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
-              FunctionName.$: "$$.Execution.Input.monitorFunctionArn"
+              FunctionName.$: "$$.Execution.Input.monitorFunctionName"
               Payload.$: "$"
             OutputPath: "$.Payload"
             Retry:
@@ -129,7 +130,7 @@ stepFunctions:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
-              FunctionName.$: "$$.Execution.Input.reduceFunctionArn"
+              FunctionName.$: "$$.Execution.Input.reduceFunctionName"
               Payload.$: "$"
             OutputPath: "$.Payload"
             Next: EndState
@@ -138,16 +139,6 @@ stepFunctions:
             End: true
  
 resources:
-
-  Outputs:
-    MonitorLambdaFunction:
-      Description: The ARN of the monitor function
-      Value:
-        Ref: MonitorLambdaFunction
-    JobLifecycleStateMachine:
-      Description: The ARN of the state machine
-      Value:
-        Ref: JobLifecycleStateMachine
 
   Resources:
     TasksTable:
@@ -165,3 +156,27 @@ resources:
           - AttributeName: batchId
             AttributeType: N
         BillingMode: PAY_PER_REQUEST
+
+  Outputs:
+    TasksTable:
+      Description: Name of the tasks table
+      Value:
+        "Ref": TasksTable
+      Export:
+        Name: BurstComputeTasksTable-${self:provider.stage}
+    JobLifecycleStateMachine:
+      Description: The ARN of the state machine
+      Value:
+        Ref: JobLifecycleStateMachine
+    DispatchLambdaFunction:
+      Description: Name of the dispatch function
+      Value:
+        Ref: DispatchLambdaFunction
+      Export:
+        Name: BurstComputeDispatchLambdaFunction-${self:provider.stage}
+    MonitorLambdaFunction:
+      Description: Name of the monitor function
+      Value:
+        Ref: MonitorLambdaFunction
+      Export:
+        Name: BurstComputeMonitorLambdaFunction-${self:provider.stage}

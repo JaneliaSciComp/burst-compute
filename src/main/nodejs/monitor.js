@@ -1,15 +1,13 @@
 const AWS = require('aws-sdk');
 const moment = require('moment');
 
-const { JOB_TIMEOUT_SECS } = process.env;
-const { JOB_TABLE_NAME } = process.env;
+const { JOB_TIMEOUT_SECS, JOB_TABLE_NAME } = process.env;
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 
 const monitorJob = async (jobParams) => {
   // Parameters
-  const { jobId } = jobParams;
-  const { numBatches } = jobParams;
+  const { jobId, numBatches, searchTimeoutSecs = JOB_TIMEOUT_SECS } = jobParams;
   const startTime = moment(jobParams.startTime);
 
   // Find out how many tasks are remaining
@@ -43,7 +41,7 @@ const monitorJob = async (jobParams) => {
       completed: true,
       timedOut: false,
     };
-  } if (elapsedSecs > JOB_TIMEOUT_SECS) {
+  } if (elapsedSecs > searchTimeoutSecs) {
     console.log(`Job timed out after ${elapsedSecs} seconds. Completed ${numComplete} of ${numBatches} tasks.`);
     return {
       ...jobParams,
