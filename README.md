@@ -2,7 +2,11 @@
 
 Serverless burst-compute implementation for AWS, using only native AWS services.
 
-Here's how it works (the code you write is in bold):
+In the diagram below, the code you write is indicated by the blue lambda icons.
+
+![Architecture Diagram](docs/burst-compute-diagram.png)
+
+Here's how it works:
 1) You define a *worker* function and a *reduce* function
 2) Launch your burst compute job by calling the dispatch function with a range of items to process
 3) The dispatcher will start copies of itself recursively and efficiently start your worker lambdas
@@ -10,49 +14,28 @@ Here's how it works (the code you write is in bold):
 5) The Step Function monitors all the results and calls the reduce function when all workers are done
 6) The *reduce* function reads all output from DynamoDB and aggregates them into the final result
 
-## Dispatch interface:
+See the [Interfaces](docs/Interfaces.md) document to find out how to define your worker and reducer functions.
 
-Input:
-```
-{
-  jobParameters: {
-    // Any parameters that each worker should receive
-  }
-}
-```
+## Build
 
-Output:
-```
-{
-  jobId: "",
-  numBatches: ""
-}
+You need Node.js 12.x or later in your path, then:
+
+```bash
+npm install
 ```
 
-## Worker interface:
+## Deployment
 
-Input:
-```
-{
-  jobId: "DynamoDB identifier where results should be written",
-  batchId: "DynamoDB identifier where results should be written",
-  jobParameters: {
-    // Input parameter dictionary as received by dispatch function
-  },
-  startIndex: "First index to process",
-  endIndex: "First index to not process",
-}
+Follow the build instructions above before attempting to deploy.
+
+To deploy this framework to your AWS account, you must have the (AWS CLI configured](https://www.serverless.com/framework/docs/providers/aws/guide/credentials#sign-up-for-an-aws-account).
+
+To deploy to the *dev* stage:
+```bash
+npm run-script sls -- deploy
 ```
 
-Side effects:
-
-
-
-
-
-##Deployment
+To deploy to production:
+```bash
+npm run sls -- deploy -s prod
 ```
-npm run sls -- deploy
-```
-
-
