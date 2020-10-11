@@ -7,7 +7,7 @@ In order to use the burst compute framework, these interfaces need to be met.
 You can define the worker function to do anything you like. However, it should operate on the range of objects denoted by [startIndex-endIndex). Once the work is done, a single row should be added to DynamoDB. 
 
 Input:
-```json
+```javascript
 {
   jobId: "DynamoDB identifier where results should be written",
   batchId: "DynamoDB identifier where results should be written",
@@ -40,7 +40,7 @@ The results can be any item supported by DynamoDB, including JSON objects and ar
 There are no expectations for the reduce function except that it should exist. Typically, the reduce function combines all of the individual intermediate results in the DynamoDB **TasksTable** which were produced by the worker functions. It then produces a final combined result. It may also do additional work such as writing the final result to S3, or notifying your web frontend via a Web Socket. 
 
 Input:
-```json
+```javascript
 {
   jobId: "DynamoDB identifier where results should be written",
   jobParameters: {
@@ -70,7 +70,7 @@ An example of fetching all non-empty intermediate results using Node.js. Note th
 ## Dispatch Interface
 
 Input:
-```json
+```javascript
 {
   workerFunctionName: "Name or ARN of your worker Lambda function",
   reduceFunctionName: "Name or ARN of your reduce Lambda function",
@@ -87,7 +87,7 @@ Input:
 ```
 
 Output:
-```json
+```javascript
 {
   jobId: "GUID assigned to the job instance",
   numBatches: "Number of batches to run, a.k.a. maximum parallelism"
