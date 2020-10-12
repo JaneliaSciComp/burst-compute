@@ -9,6 +9,7 @@ custom:
   tracing: false
   debug: "true"
   tasksTable: ${self:service}-${self:provider.stage}-tasks
+  stateMachine: ${self:service}-${self:provider.stage}-lifecycle
   defaultJobTimeoutSecs: "60"
 
 provider:
@@ -31,24 +32,16 @@ provider:
   iamRoleStatements:
     - Effect: "Allow"
       Action:
-        - dynamodb:DescribeStream
-        - dynamodb:DescribeTable
-        - dynamodb:GetRecords
-        - dynamodb:ListStreams
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-        - dynamodb:UpdateTable
         - dynamodb:Query
       Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"
     - Effect: Allow
       Action:
-        - lambda:InvokeFunction
-        - lambda:InvokeAsync
-      Resource: "*"
+        - states:StartExecution
+      Resource: "arn:aws:states:${self:provider.region}:*:stateMachine:${self:custom.stateMachine}"
     - Effect: Allow
       Action:
-        - states:StartExecution
+        - lambda:InvokeFunction
+        - lambda:InvokeAsync
       Resource: "*"
 
 package:
@@ -72,6 +65,7 @@ functions:
       DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
       MONITOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-monitor
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
+      TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
   monitor:
     runtime: nodejs12.x
@@ -82,7 +76,7 @@ functions:
     environment:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
-      JOB_TABLE_NAME: ${self:custom.tasksTable}
+      TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
 stepFunctions:
   validate: true # enable pre-deployment definition validation
@@ -90,9 +84,9 @@ stepFunctions:
 
     jobLifecycleStateMachine:
       id: JobLifecycleStateMachine
-      name: ${self:service}-${self:provider.stage}-lifecycle
+      name: ${self:custom.stateMachine}
       definition:
-        Comment: "Monitors a burst compute job and calls the reducer when all tasks are done"
+        Comment: "Monitors a burst compute job and calls the combiner when all tasks are done"
         StartAt: Monitor
         States:
           Monitor:
@@ -113,24 +107,24 @@ stepFunctions:
             Choices:
               - Variable: "$.timedOut"
                 BooleanEquals: true
-                Next: Reduce
+                Next: Combine
             Default: AreWeDoneYet
           AreWeDoneYet:
             Type: Choice
             Choices:
               - Variable: "$.completed"
                 BooleanEquals: true
-                Next: Reduce
+                Next: Combine
             Default: Wait
           Wait:
             Type: Wait
             Seconds: 1
             Next: Monitor
-          Reduce:
+          Combine:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
-              FunctionName.$: "$$.Execution.Input.reduceFunctionName"
+              FunctionName.$: "$$.Execution.Input.combinerFunctionName"
               Payload.$: "$"
             OutputPath: "$.Payload"
             Next: EndState
@@ -156,6 +150,9 @@ resources:
           - AttributeName: batchId
             AttributeType: N
         BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: "true"
 
   Outputs:
     TasksTable:

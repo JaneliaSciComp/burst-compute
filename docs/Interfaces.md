@@ -1,6 +1,6 @@
 # Function interfaces
 
-In order to use the burst compute framework, you need to define a **worker** function and a **reduce** function. 
+In order to use the burst compute framework, you need to define a **worker** function and a **combiner** function. 
 
 ## Worker Interface
 
@@ -9,13 +9,14 @@ You can define the worker function to do anything you like. If a job operates on
 Input:
 ```javascript
 {
-  jobId: "DynamoDB identifier where results should be written",
-  batchId: "DynamoDB identifier where results should be written",
+  tasksTableName: "name of the DynamoDB table where results should be written"
+  jobId: "DynamoDB partition key where results should be written",
+  batchId: "DynamoDB sort key where results should be written",
+  startIndex: "First index to process",
+  endIndex: "First index to not process",
   jobParameters: {
     // Input parameter dictionary as received by dispatch function
   },
-  startIndex: "First index to process",
-  endIndex: "First index to not process",
 }
 ```
 
@@ -43,21 +44,22 @@ This function will require dynamodb:PutItem permission to the **TasksTable**:
 },
 ```
 
-## Reduce Interface
+## Combiner Interface
 
-There are no expectations for the reduce function except that it should exist so that the framework can call it. 
+There are no expectations for the combiner function except that it should exist so that the framework can call it. 
 
-Typically, the reduce function combines all of the individual intermediate results in the DynamoDB **TasksTable** which were produced by the worker functions. It then produces a final combined result. It may also do additional work such as writing the final result to S3, or notifying your web frontend via a Web Socket. 
+Typically, the combiner function *combines* all of the individual intermediate results in the DynamoDB **TasksTable** which were produced by the worker functions. It then produces a final combined result. It may also do additional work such as writing the final result to S3, or notifying your web frontend via a Web Socket. 
 
 Input:
 ```javascript
 {
-  jobId: "DynamoDB identifier where results should be written",
+  tasksTableName: "Name of the DynamoDB table from which results should be read",
+  jobId: "DynamoDB partition id for querying the tasks table",
+  startTime: "ISO date indicating when the job was started",
+  elapsedSecs: "Number of seconds that elapsed since the job was started",
   jobParameters: {
     // Input parameter dictionary as received by dispatch function
   },
-  startTime: "ISO date indicating when the job was started"
-  elapsedSecs: "Number of seconds that elapsed since the job was started"
 }
 ```
 
@@ -96,17 +98,17 @@ You can invoke the dispatch function either synchronously or asynchronously, dep
 Input:
 ```javascript
 {
-  workerFunctionName: "Name or ARN of your worker Lambda function",
-  reduceFunctionName: "Name or ARN of your reduce Lambda function",
-  jobParameters: {
-    // Any parameters that each worker should receive
-  },
+  workerFunctionName: "Name or ARN of the user-defined worker Lambda function",
+  combinerFunctionName: "Name or ARN of the user-defined combiner Lambda function",
   startIndex: "Start index to process, inclusive, e.g. 0",
   endIndex: "End index to process, exclusive, e.g. N-1 if you have N items to process",
   batchSize: "How many items should each worker instance process",
   numLevels: "Number of levels in the dispatcher tree, e.g. 1 or 2",
   maxParallelism: "Maximum number of batches to run",
-  searchTimeoutSecs: "Number of seconds to wait for job to finish before ending with a timeout"
+  searchTimeoutSecs: "Number of seconds to wait for job to finish before ending with a timeout",
+  jobParameters: {
+    // Any parameters that each worker should receive
+  },
 }
 ```
 
@@ -118,9 +120,9 @@ Output:
 }
 ```
 
-## Resource References
+## Cross-Stack References
 
-Once the framework is deployed, you can write serverless applications that leverage it. The best way to reference the resource names is to use [cross-stack references](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html) using the provided CloudFormation Outputs. 
+If you don't want to hardcode the resource names of the dispatch function and tasks table, you can use [cross-stack references](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html) using the provided CloudFormation Outputs. 
 
 For example, if you are using Serverless Framework, you can reference the framework resources in your serverless.yml like this:
 ```yaml

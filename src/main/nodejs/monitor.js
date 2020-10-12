@@ -1,7 +1,7 @@
 const AWS = require('aws-sdk');
 const moment = require('moment');
 
-const { JOB_TIMEOUT_SECS, JOB_TABLE_NAME } = process.env;
+const { JOB_TIMEOUT_SECS, TASKS_TABLE_NAME } = process.env;
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 
@@ -12,7 +12,7 @@ const monitorJob = async (jobParams) => {
 
   // Find out how many tasks are remaining
   const params = {
-    TableName: JOB_TABLE_NAME,
+    TableName: TASKS_TABLE_NAME,
     ConsistentRead: true,
     Select: 'COUNT',
     KeyConditionExpression: 'jobId = :jobId',

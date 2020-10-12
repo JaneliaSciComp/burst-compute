@@ -7,6 +7,7 @@ const {
   MONITOR_FUNCTION_NAME,
   STATE_MACHINE_ARN,
   JOB_TIMEOUT_SECS,
+  TASKS_TABLE_NAME,
 } = process.env;
 
 const DEFAULTS = {
@@ -56,7 +57,7 @@ exports.dispatchHandler = async (event) => {
   console.log('Input event:', JSON.stringify(event));
 
   // User defined parameters
-  const { workerFunctionName, reduceFunctionName, searchTimeoutSecs = JOB_TIMEOUT_SECS } = event;
+  const { workerFunctionName, combinerFunctionName, searchTimeoutSecs = JOB_TIMEOUT_SECS } = event;
   const startIndex = parseInt(event.startIndex);
   const endIndex = parseInt(event.endIndex);
   let batchSize = parseInt(event.batchSize);
@@ -69,13 +70,15 @@ exports.dispatchHandler = async (event) => {
 
   // Programmatic parameters. In the case of the root manager, these may be null initially
   // and then generated for later invocations.
-  let { jobId, monitorName } = event;
+  let { jobId } = event;
   let numBatches = parseInt(event.numBatches);
   let branchingFactor = parseInt(event.branchingFactor);
 
   if (level === 0) {
     // This next log statement is parsed by the analyzer. DO NOT CHANGE.
     console.log('Root Dispatcher');
+    const now = new Date();
+    const startTime = now.toISOString();
 
     // Generate new job id
     jobId = uuidv1();
@@ -95,23 +98,22 @@ exports.dispatchHandler = async (event) => {
     branchingFactor = Math.ceil(numBatches ** (1 / numLevels));
 
     // Start monitoring
-    const now = new Date();
     const monitorParams = {
       jobId,
       jobParameters,
       numBatches,
       searchTimeoutSecs,
-      startTime: now.toISOString(),
+      startTime,
       monitorFunctionName: MONITOR_FUNCTION_NAME,
-      reduceFunctionName,
+      combinerFunctionName,
+      tasksTableName: TASKS_TABLE_NAME,
     };
     console.log(`Starting state machine ${STATE_MACHINE_ARN}`);
-    monitorName = jobId;
-    await startStepFunction(STATE_MACHINE_ARN, monitorParams, monitorName);
+    await startStepFunction(STATE_MACHINE_ARN, monitorParams, jobId);
   }
 
   // This next log statement is parsed by the analyzer. DO NOT CHANGE.
-  console.log(`Monitor: ${monitorName}`);
+  console.log(`Job Id: ${jobId}`);
 
   const nextLevelManagerRange = (branchingFactor ** (numLevels - level - 1)) * batchSize;
   console.log(`Level ${level} -> next range: ${nextLevelManagerRange}`);
@@ -123,9 +125,8 @@ exports.dispatchHandler = async (event) => {
     batchSize,
     numBatches,
     branchingFactor,
-    monitorName,
     workerFunctionName,
-    reduceFunctionName,
+    combinerFunctionName,
     searchTimeoutSecs,
   };
 
@@ -156,16 +157,16 @@ exports.dispatchHandler = async (event) => {
       // This next log statement is parsed by the analyzer. DO NOT CHANGE.
       console.log(`Dispatching Batch Id: ${batchId}`);
       const params = {
-        monitorName,
         jobId,
         batchId,
         jobParameters,
         startIndex: workerStart,
         endIndex: workerEnd,
+        tasksTableName: TASKS_TABLE_NAME,
         ...nextEvent,
       };
       invokePromises.push(invokeAsync(workerFunctionName, params));
-      console.log(`(Promise#${index}) Dispatched batch #${batchId} to ${workerFunctionName}`);
+      console.log(`(Promise#${index}) Dispatched worker #${batchId} to ${workerFunctionName}`);
       batchId += 1;
       index += 1;
     }
@@ -175,7 +176,6 @@ exports.dispatchHandler = async (event) => {
   responses.forEach((r, i) => console.log(`(Promise#${i}) status=${r.Status}`));
 
   return {
-    monitorName,
     jobId,
     numBatches,
     branchingFactor,

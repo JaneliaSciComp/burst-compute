@@ -2,19 +2,19 @@
 
 Serverless burst-compute implementation for AWS, using only native AWS services.
 
-For [embarassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) workloads, **N** items may be trivially processed by **T** threads. Given **N** items, and a **batchSize** (the maximum number of items to be processed by a single process in serial), we divide the work into **N/batchSize** batches and invoke that many user-provided **worker** Lambdas. When all the worker functions are done, the results are combined by the user-provided **reduce** Lambda. 
+For [embarassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) workloads, **N** items may be trivially processed by **T** threads. Given **N** items, and a **batchSize** (the maximum number of items to be processed by a single process in serial), we divide the work into **N/batchSize** batches and invoke that many user-provided **worker** Lambdas. When all the worker functions are done, the results are combined by the user-provided **combiner** Lambda. 
 
 In the diagram below, the code you write is indicated by the blue lambda icons.
 
 ![Architecture Diagram](docs/burst-compute-diagram.png)
 
 Here's how it works, step-by-step:
-1) You define a **worker** function and a **reduce** function
+1) You define a **worker** function and a **combiner** function
 2) Launch your burst compute job by calling the **dispatch** function with a range of items to process
 3) The dispatcher will start copies of itself recursively and efficiently start your worker lambdas
 4) Each **worker** is given a range of inputs and must compute results for those inputs and write results to DynamoDB
-5) The Step Function monitors all the results and calls the reduce function when all workers are done
-6) The **reduce** function reads all output from DynamoDB and aggregates them into the final result
+5) The Step Function monitors all the results and calls the combiner function when all workers are done
+6) The **combiner** function reads all output from DynamoDB and aggregates them into the final result
 
 ## Build
 
@@ -42,5 +42,5 @@ npm run sls -- deploy -s prod
 
 ## Usage
 
-1. Create **worker** and **reduce** functions which follow the input/output specification defined in the [Interfaces](docs/Interfaces.md) document.
+1. Create **worker** and **combiner** functions which follow the input/output specification defined in the [Interfaces](docs/Interfaces.md) document.
 2. Invoke the **dispatch** function to start a burst job. 
