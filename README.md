@@ -42,5 +42,5 @@ npm run sls -- deploy -s prod
 
 ## Usage
 
-1. Create **worker*** and **reduce** functions which follow the input/output specification defined in the [Interfaces](docs/Interfaces.md) document.
+1. Create **worker** and **reduce** functions which follow the input/output specification defined in the [Interfaces](docs/Interfaces.md) document.
 2. Invoke the **dispatch** function to start a burst job. 
