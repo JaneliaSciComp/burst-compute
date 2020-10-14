@@ -20,11 +20,14 @@ Input:
 }
 ```
 
-After doing some computation, each function instance writes results as a new row in the DynamoDB **TasksTable** with the given **jobId** and **batchId** as the partition and sort key, respectively. Example code in Java:
+After doing some computation, each function instance writes results as a new row in the DynamoDB **TasksTable** with the given **jobId** and **batchId** as the partition and sort key, respectively. The *ttl* should be set to a small value like 1 hour or 1 day, so that this temporary result is cleaned up after its usefulness is outlived. Example code in Java:
 ```java
+    long now = Instant.now().getEpochSecond(); // unix time
+    long ttl = now + 60 * 60; // 60 minutes
     Map<String, AttributeValue> item = new HashMap<>();
     item.put("jobId", AttributeValue.builder().s(jobId).build());
     item.put("batchId", AttributeValue.builder().n(batchId.toString()).build());
+    item.put("ttl", AttributeValue.builder().n(ttl+"").build());
     item.put("results", AttributeValue.builder().s(toJson(results)).build());
     PutItemRequest putItemRequest = PutItemRequest.builder().tableName(tableName).item(item).build();
     dynamoDbClient.putItem(putItemRequest);
