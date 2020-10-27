@@ -7,15 +7,15 @@ plugins:
 custom:
   version: ${pkgjson:version}
   tracing: false
-  debug: "true"
+  debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
   stateMachine: ${self:service}-${self:provider.stage}-lifecycle
-  defaultJobTimeoutSecs: "60"
+  defaultJobTimeoutSecs: 60
 
 provider:
   name: aws
   region: ${opt:region, "us-east-1"}
-  stage: ${opt:stage, "dev"}
+  stage: ${opt:stage, dev}
   tags:
     PROJECT: BurstCompute
     VERSION: ${self:custom.version}
@@ -28,9 +28,9 @@ provider:
   tracing:
     lambda: ${self:custom.tracing}
   environment:
-    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
   iamRoleStatements:
-    - Effect: "Allow"
+    - Effect: Allow
       Action:
         - dynamodb:Query
       Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"

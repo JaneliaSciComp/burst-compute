@@ -17,12 +17,24 @@ const monitorJob = async (jobParams) => {
     Select: 'COUNT',
     KeyConditionExpression: 'jobId = :jobId',
     ExpressionAttributeValues: {
-      ':jobId': jobId,
+      ':jobId': jobId
     },
+    ScanIndexForward: true
   };
+
   console.log('Fetching result count: ', params);
-  const countResult = await docClient.query(params).promise();
-  const numComplete = countResult.Count;
+  let numComplete = 0;
+  let lastEvaluatedKey = null;
+  do {
+    const queryParams = {
+      ExclusiveStartKey: lastEvaluatedKey,
+      ...params
+    }
+    const countResult = await docClient.query(queryParams).promise();
+    console.log('Fetched result count using', queryParams, '->', countResult);
+    numComplete += countResult.Count;
+    lastEvaluatedKey = countResult.LastEvaluatedKey
+  } while (lastEvaluatedKey);
   console.log(`Tasks completed: ${numComplete}/${numBatches}`);
 
   // Calculate total time
@@ -41,7 +53,8 @@ const monitorJob = async (jobParams) => {
       completed: true,
       timedOut: false,
     };
-  } if (elapsedSecs > searchTimeoutSecs) {
+  }
+  if (elapsedSecs > searchTimeoutSecs) {
     console.log(`Job timed out after ${elapsedSecs} seconds. Completed ${numComplete} of ${numBatches} tasks.`);
     return {
       ...jobParams,
@@ -51,7 +64,7 @@ const monitorJob = async (jobParams) => {
       timedOut: true,
     };
   }
-  console.log(`Job still running after ${elapsedSecs} seconds. Completed ${numComplete} of ${numBatches} tasks.`);
+  console.log(`Job still running after ${elapsedSecs} seconds (${searchTimeoutSecs-elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
   return {
     ...jobParams,
     elapsedSecs,
