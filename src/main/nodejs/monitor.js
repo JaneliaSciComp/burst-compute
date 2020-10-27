@@ -23,18 +23,17 @@ const monitorJob = async (jobParams) => {
   };
 
   console.log('Fetching result count: ', params);
+
   let numComplete = 0;
-  let lastEvaluatedKey = null;
+  let countResult;
   do {
-    const queryParams = {
-      ExclusiveStartKey: lastEvaluatedKey,
-      ...params
-    }
-    const countResult = await docClient.query(queryParams).promise();
-    console.log('Fetched result count using', queryParams, '->', countResult);
+    // eslint-disable-next-line no-await-in-loop
+    countResult = await docClient.query(params).promise();
+    console.log('Scanned count:', JSON.stringify(countResult));
     numComplete += countResult.Count;
-    lastEvaluatedKey = countResult.LastEvaluatedKey
-  } while (lastEvaluatedKey);
+    params.ExclusiveStartKey = countResult.LastEvaluatedKey;
+  } while (countResult.LastEvaluatedKey);
+
   console.log(`Tasks completed: ${numComplete}/${numBatches}`);
 
   // Calculate total time
@@ -75,7 +74,7 @@ const monitorJob = async (jobParams) => {
 };
 
 exports.monitorHandler = async (event) => {
-  console.log(event);
+  console.log('Input event:', JSON.stringify(event));
   try {
     return await monitorJob(event);
   } catch (e) {
