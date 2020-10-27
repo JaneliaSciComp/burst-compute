@@ -15,7 +15,7 @@ custom:
 provider:
   name: aws
   region: ${opt:region, "us-east-1"}
-  stage: ${opt:stage, dev}
+  stage: ${opt:stage, "dev"}
   tags:
     PROJECT: BurstCompute
     VERSION: ${self:custom.version}
