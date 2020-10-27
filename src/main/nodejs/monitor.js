@@ -17,9 +17,9 @@ const monitorJob = async (jobParams) => {
     Select: 'COUNT',
     KeyConditionExpression: 'jobId = :jobId',
     ExpressionAttributeValues: {
-      ':jobId': jobId
+      ':jobId': jobId,
     },
-    ScanIndexForward: true
+    ScanIndexForward: true,
   };
 
   console.log('Fetching result count: ', params);
@@ -63,7 +63,7 @@ const monitorJob = async (jobParams) => {
       timedOut: true,
     };
   }
-  console.log(`Job still running after ${elapsedSecs} seconds (${searchTimeoutSecs-elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
+  console.log(`Job still running after ${elapsedSecs} seconds (${searchTimeoutSecs - elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
   return {
     ...jobParams,
     elapsedSecs,
