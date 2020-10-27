@@ -23,6 +23,8 @@ jobs:
           paths:
             - node_modules
 
+      - run: npm run sls package
+
       - run: npx eslint src/main/nodejs
 
 workflows:
