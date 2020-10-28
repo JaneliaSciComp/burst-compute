@@ -9,8 +9,7 @@
   },
   "scripts": {
     "sls": "sls",
-    "test": "jest",
-    "search": "AWS_SDK_LOAD_CONFIG=true DISABLE_XRAY=true node src/main/nodejs/search_client.js"
+    "test": "jest"
   },
   "dependencies": {
     "aws-sdk": "^2.720.0",
