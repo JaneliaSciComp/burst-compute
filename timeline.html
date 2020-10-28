@@ -5,8 +5,22 @@
 body {
   font-family: Arial, sans-serif; 
   font-size: 13;
-  height: 100%;
   margin: 0;
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+}
+.header .half {
+  flex: 50%;
+  max-height: 25em;
+  overflow: auto;
+}
+.json {
+  break-before: always;
+  font-family: monospace;
+  white-space: pre;
+  vertical-align: top;
 }
 .box {
   display: flex;
@@ -15,20 +29,19 @@ body {
 }
 .box .row.header {
   flex: 0 1 auto;
+  padding: 2pt;
 }
 .box .row.content {
   flex: 1 1 auto;
+  padding: 2pt;
 }
 .box .row.footer {
   flex: 0 1 40px;
+  padding: 2pt;
 }
 .tooltip {
   padding: 5px;
   font-size: 1.2em;
-}
-div#event {
-  font-family: monospace;
-  white-space: pre;
 }
 </style>
 <script src="https://code.jquery.com/jquery-3.5.1.slim.js"
@@ -55,8 +68,8 @@ function handleFileSelect(evt) {
   reader.onload = (function (theFile) {
     return function (e) {
       data = JSON.parse(e.target.result)
-      const inputStr = JSON.stringify(data.input, null, 2)
-      document.getElementById('event').innerHTML = inputStr
+      document.getElementById('inputJson').innerHTML = JSON.stringify(data.input, null, 2)
+      document.getElementById('outputJson').innerHTML = JSON.stringify(data.output, null, 2)
       drawChart(data)
     };
   })(file);
@@ -199,11 +212,20 @@ $(window).on('resizeEnd', function() {
 <body>
 
 <div class="box">
-  <div class="row header">
-    <form>
-      Input JSON: <input type="file" id="files" accept=".json"/>
-    </form>
-    <div id="event"></div>
+  <div class="header" style="padding: 4px; border-bottom: 1pt solid black">
+    <input type="file" id="files" accept=".json"/>
+  </div>
+  <div class="header">
+    <div class="header half">
+      <form>
+        Input JSON: 
+      </form>
+      <div class="json" id="inputJson"></div>
+    </div>
+    <div class="header half">
+      Output JSON: 
+      <div class="json" id="outputJson"></div>
+    </div>
   </div>
   <div class="row content">
     <div id="timeline" style="height: 100%"></div>
@@ -212,7 +234,6 @@ $(window).on('resizeEnd', function() {
     <p></p>
   </div>
 </div>
-
 
 </body>
 </html>
