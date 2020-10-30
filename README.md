@@ -1,5 +1,7 @@
 # Burst Compute Framework
 
+[![CircleCI](https://circleci.com/gh/JaneliaSciComp/burst-compute.svg?style=svg)](https://circleci.com/gh/JaneliaSciComp/burst-compute)
+
 Serverless burst-compute implementation for AWS, using only native AWS services.
 
 For [embarassingly parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) workloads, **N** items may be trivially processed by **T** threads. Given **N** items, and a **batchSize** (the maximum number of items to be processed by a single process in serial), we divide the work into **N/batchSize** batches and invoke that many user-provided **worker** Lambdas. When all the worker functions are done, the results are combined by the user-provided **combiner** Lambda. 
