@@ -2,10 +2,9 @@ service: burst-compute
 
 plugins:
   - serverless-step-functions
-  - serverless-plugin-package-json
 
 custom:
-  version: ${pkgjson:version}
+  version: ${file(./package.json):version}
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
@@ -46,9 +45,7 @@ provider:
 
 package:
   individually: true
-  exclude:
-    - src/test/**
-  include:
+  patterns:
     - src/main/nodejs/**
 
 functions:
