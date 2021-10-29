@@ -5,6 +5,7 @@ plugins:
 
 custom:
   version: ${file(./package.json):version}
+  nodeJSRuntime: nodejs14.x
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
@@ -15,6 +16,7 @@ provider:
   name: aws
   region: ${opt:region, "us-east-1"}
   stage: ${opt:stage, "dev"}
+  lambdaHashingVersion: 20201221
   tags:
     PROJECT: BurstCompute
     VERSION: ${self:custom.version}
@@ -51,7 +53,7 @@ package:
 functions:
 
   dispatch:
-    runtime: nodejs12.x
+    runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/dispatch.dispatchHandler
     memorySize: 256
     # 5 minute timeout
@@ -65,11 +67,10 @@ functions:
       TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
   monitor:
-    runtime: nodejs12.x
+    runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/monitor.monitorHandler
     memorySize: 128
-    # 10 second timeout
-    timeout: 10
+    timeout: ${self:custom.defaultJobTimeoutSecs}
     environment:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
@@ -98,6 +99,10 @@ stepFunctions:
                 - Lambda.TooManyRequestsException
                 IntervalSeconds: 1
                 MaxAttempts: 100
+            Catch:
+              - ErrorEquals:
+                - States.ALL
+                Next: Combine
             Next: IsTimedOut
           IsTimedOut:
             Type: Choice
