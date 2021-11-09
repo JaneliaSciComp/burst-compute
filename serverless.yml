@@ -128,7 +128,19 @@ stepFunctions:
             Parameters:
               FunctionName.$: "$$.Execution.Input.combinerFunctionName"
               Payload.$: "$"
-            OutputPath: "$.Payload"
+            OutputPath: "$"
+            Catch:
+              - ErrorEquals:
+                - States.ALL
+                Next: CombineError
+                ResultPath: "$.fatalErrors[0]"
+            Next: EndState
+          CombineError:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName.$: "$$.Execution.Input.combinerFunctionName"
+              Payload.$: "$"
             Next: EndState
           EndState:
             Type: Pass
