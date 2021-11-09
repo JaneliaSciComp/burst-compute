@@ -20,7 +20,7 @@ const monitorJob = async (jobParams) => {
       ':jobId': jobId,
     },
     ScanIndexForward: true,
-    ReturnConsumedCapacity: 'TOTAL'
+    ReturnConsumedCapacity: 'TOTAL',
   };
 
   console.log('Fetching result count: ', params);
