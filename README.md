@@ -30,14 +30,16 @@ npm install
 
 Follow the build instructions above before attempting to deploy.
 
-To deploy this framework to your AWS account, you must have the [AWS CLI configured](https://www.serverless.com/framework/docs/providers/aws/guide/credentials#sign-up-for-an-aws-account).
+Deployment will create all the necessary AWS services, including Lambda functions, DynamoDB tables, and Step Functions. To deploy this framework to your AWS account, you must have the [AWS CLI configured](https://www.serverless.com/framework/docs/providers/aws/guide/credentials#sign-up-for-an-aws-account). 
 
 To deploy to the *dev* stage:
 ```bash
 npm run sls -- deploy
 ```
 
-To deploy to production:
+This will create a application stack named `burst-compute-dev`. 
+
+To deploy to a different stage (e.g. "prod"), add a stage argument:
 ```bash
 npm run sls -- deploy -s prod
 ```
