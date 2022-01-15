@@ -1,6 +1,7 @@
 service: burst-compute
 
 plugins:
+  - serverless-bundle
   - serverless-step-functions
 
 custom:
