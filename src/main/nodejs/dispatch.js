@@ -53,7 +53,7 @@ const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName
 };
 
 // This Lambda is called recursively to dispatch all of the burst workers.
-exports.dispatchHandler = async (event) => {
+export const dispatchHandler = async (event) => {
   // This next log statement is parsed by the analyzer. DO NOT CHANGE.
   console.log('Input event:', JSON.stringify(event));
 

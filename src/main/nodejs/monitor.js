@@ -77,7 +77,7 @@ const monitorJob = async (jobParams) => {
   };
 };
 
-exports.monitorHandler = async (event) => {
+export const monitorHandler = async (event) => {
   console.log('Input event:', JSON.stringify(event));
   try {
     return await monitorJob(event);
