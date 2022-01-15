@@ -9,3 +9,4 @@ parserOptions:
 rules:
   no-console: off
   radix: off
+  import/prefer-default-export: off
