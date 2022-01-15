@@ -1,5 +1,5 @@
-const { v1: uuidv1 } = require('uuid');
-const AWS = require('aws-sdk');
+import { v1 as uuidv1 } from 'uuid';
+import AWS from 'aws-sdk';
 
 const DEBUG = !!process.env.DEBUG;
 const {
@@ -52,6 +52,7 @@ const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName
   return result;
 };
 
+// This Lambda is called recursively to dispatch all of the burst workers.
 exports.dispatchHandler = async (event) => {
   // This next log statement is parsed by the analyzer. DO NOT CHANGE.
   console.log('Input event:', JSON.stringify(event));

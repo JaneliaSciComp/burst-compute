@@ -1,10 +1,13 @@
-const AWS = require('aws-sdk');
-const moment = require('moment');
+import AWS from 'aws-sdk';
+import moment from 'moment';
 
 const { JOB_TIMEOUT_SECS, TASKS_TABLE_NAME } = process.env;
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 
+// This Lambda is called by the monitor step function to see if the job is completed.
+// It checks DynamoDB to see if all the tasks are done and if so, returns the completed:true
+// in the result object.
 const monitorJob = async (jobParams) => {
   // Parameters
   const { jobId, numBatches, searchTimeoutSecs = JOB_TIMEOUT_SECS } = jobParams;
