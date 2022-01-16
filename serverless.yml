@@ -146,7 +146,7 @@ stepFunctions:
           EndState:
             Type: Pass
             End: true
- 
+
 resources:
 
   Resources:
