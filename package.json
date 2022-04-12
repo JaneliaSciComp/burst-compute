@@ -1,6 +1,6 @@
 {
   "name": "burst-compute",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Burst computation engine for burst-parallel jobs on AWS",
   "license": "BSD-3-Clause",
   "repository": {
