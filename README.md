@@ -1,7 +1,7 @@
 # Burst Compute Framework
 
+[![DOI](https://zenodo.org/badge/301732359.svg)](https://zenodo.org/badge/latestdoi/301732359)
 [![CircleCI](https://circleci.com/gh/JaneliaSciComp/burst-compute.svg?style=svg)](https://circleci.com/gh/JaneliaSciComp/burst-compute)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6453457.svg)](https://doi.org/10.5281/zenodo.6453457)
 
 Serverless burst-compute implementation for AWS, using only native AWS services.
 
