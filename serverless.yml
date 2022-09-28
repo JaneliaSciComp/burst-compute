@@ -17,7 +17,6 @@ provider:
   name: aws
   region: ${opt:region, "us-east-1"}
   stage: ${opt:stage, "dev"}
-  lambdaHashingVersion: 20201221
   tags:
     PROJECT: BurstCompute
     VERSION: ${self:custom.version}
@@ -31,20 +30,22 @@ provider:
     lambda: ${self:custom.tracing}
   environment:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:Query
-      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"
-    - Effect: Allow
-      Action:
-        - states:StartExecution
-      Resource: "arn:aws:states:${self:provider.region}:*:stateMachine:${self:custom.stateMachine}"
-    - Effect: Allow
-      Action:
-        - lambda:InvokeFunction
-        - lambda:InvokeAsync
-      Resource: "*"
+  iam:
+    role:
+      statements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"
+      - Effect: Allow
+        Action:
+          - states:StartExecution
+        Resource: "arn:aws:states:${self:provider.region}:*:stateMachine:${self:custom.stateMachine}"
+      - Effect: Allow
+        Action:
+          - lambda:InvokeFunction
+          - lambda:InvokeAsync
+        Resource: "*"
 
 package:
   individually: true
