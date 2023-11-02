@@ -6,7 +6,7 @@ plugins:
 
 custom:
   version: ${file(./package.json):version}
-  nodeJSRuntime: nodejs14.x
+  nodeJSRuntime: nodejs16.x
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
