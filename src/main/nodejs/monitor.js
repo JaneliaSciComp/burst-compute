@@ -1,9 +1,11 @@
-import AWS from 'aws-sdk';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import moment from 'moment';
 
 const { JOB_TIMEOUT_SECS, TASKS_TABLE_NAME } = process.env;
 
-const docClient = new AWS.DynamoDB.DocumentClient();
+const ddbClient = new DynamoDBClient({});
+const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 
 // This Lambda is called by the monitor step function to see if the job is completed.
 // It checks DynamoDB to see if all the tasks are done and if so, returns the completed:true
@@ -32,7 +34,7 @@ const monitorJob = async (jobParams) => {
   let countResult;
   do {
     // eslint-disable-next-line no-await-in-loop
-    countResult = await docClient.query(params).promise();
+    countResult = await ddbDocClient.send(new QueryCommand(params));
     console.log('Scanned count:', JSON.stringify(countResult));
     numComplete += countResult.Count;
     params.ExclusiveStartKey = countResult.LastEvaluatedKey;

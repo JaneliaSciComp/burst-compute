@@ -6,7 +6,7 @@ plugins:
 
 custom:
   version: ${file(./package.json):version}
-  nodeJSRuntime: nodejs16.x
+  nodeJSRuntime: nodejs18.x
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
@@ -44,7 +44,6 @@ provider:
       - Effect: Allow
         Action:
           - lambda:InvokeFunction
-          - lambda:InvokeAsync
         Resource: "*"
 
 package:
@@ -168,7 +167,7 @@ resources:
         BillingMode: PAY_PER_REQUEST
         TimeToLiveSpecification:
           AttributeName: ttl
-          Enabled: "true"
+          Enabled: true
 
   Outputs:
     TasksTable:
