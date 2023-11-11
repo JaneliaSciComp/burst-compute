@@ -117,6 +117,7 @@ stepFunctions:
                   Resource: arn:aws:states:::lambda:invoke
                   Parameters:
                     FunctionName.$: "$$.Execution.Input.workerFunctionName"
+                    InvocationType: "Event"
                     Payload.$: "$"
                   OutputPath: "$.Payload"
                   End: true
@@ -124,11 +125,15 @@ stepFunctions:
             Next: FilterParams
           FilterParams:
             Type: Pass
-            Parameters:
-              - jobId.$: "$.jobId"
-              - numBatches.$: "$.numBatches"
-              - batchResults.$: "$.batchResults"
-              - searchTimeoutSecs.$: "$.searchTimeoutSecs"
+            Parameters: {
+              "jobId.$": "$.jobId",
+              "jobParameters.$": "$.jobParameters",
+              "numBatches.$": "$.numBatches",
+              "searchTimeoutSecs.$": "$.searchTimeoutSecs",
+              "combinerFunctionName.$": "$.combinerFunctionName",
+              "monitorFunctionName.$": "$.monitorFunctionName",
+              "tasksTableName.$": "$.tasksTableName"
+            }
             Next: Monitor
           Monitor:
             Type: Task
