@@ -86,8 +86,50 @@ stepFunctions:
       name: ${self:custom.stateMachine}
       definition:
         Comment: "Monitors a burst compute job and calls the combiner when all tasks are done"
-        StartAt: Monitor
+        StartAt: MapJobs
         States:
+          MapJobs:
+            Type: Map
+            InputPath: "$"
+            ItemsPath: "$.batches"
+            ItemSelector: {
+              "jobId.$": "$$.Execution.Input.jobId",
+              "startTime.$": "$$.Execution.Input.startTime",
+              "numBatches.$": "$$.Execution.Input.numBatches",
+              "searchTimeoutSecs.$": "$$.Execution.Input.searchTimeoutSecs",
+              "jobParameters.$": "$$.Execution.Input.jobParameters",
+              "workerFunctionName.$": "$$.Execution.Input.workerFunctionName",
+              "combinerFunctionName.$": "$$.Execution.Input.combinerFunctionName",
+              "monitorFunctionName.$": "$$.Execution.Input.monitorFunctionName",
+              "tasksTableName.$": "$$.Execution.Input.tasksTableName",
+              "batchId.$": "$$.Map.Item.Value.batchId",
+              "startIndex.$": "$$.Map.Item.Value.startIndex",
+              "endIndex.$": "$$.Map.Item.Value.endIndex"
+            }
+            ItemProcessor:
+              ProcessorConfig:
+                Mode: DISTRIBUTED
+                ExecutionType: STANDARD
+              StartAt: ExecuteBatch
+              States:
+                ExecuteBatch:
+                  Type: Task
+                  Resource: arn:aws:states:::lambda:invoke
+                  Parameters:
+                    FunctionName.$: "$$.Execution.Input.workerFunctionName"
+                    Payload.$: "$"
+                  OutputPath: "$.Payload"
+                  End: true
+            ResultPath: "$.batchResults"
+            Next: FilterParams
+          FilterParams:
+            Type: Pass
+            Parameters:
+              - jobId.$: "$.jobId"
+              - numBatches.$: "$.numBatches"
+              - batchResults.$: "$.batchResults"
+              - searchTimeoutSecs.$: "$.searchTimeoutSecs"
+            Next: Monitor
           Monitor:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
