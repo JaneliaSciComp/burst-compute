@@ -79,8 +79,6 @@ const startBatchJobs = async (input) => {
     };
   });
 
-  const actualBatchJobs = batchesParams.slice(0, 400);
-
   const now = new Date();
   const startTime = now.toISOString();
 
@@ -88,14 +86,14 @@ const startBatchJobs = async (input) => {
     jobId,
     jobParameters,
     batchSize,
-    numBatches: actualBatchJobs.length,
+    numBatches: batchesParams.length,
     startTime,
     searchTimeoutSecs,
     tasksTableName: TASKS_TABLE_NAME,
     workerFunctionName,
     combinerFunctionName,
     monitorFunctionName: MONITOR_FUNCTION_NAME,
-    batches: actualBatchJobs,
+    batches: batchesParams,
   };
 
   console.log(`Starting state machine ${STATE_MACHINE_ARN} - job ${jobId} to process ${numBatches} batches `, workflowParams);

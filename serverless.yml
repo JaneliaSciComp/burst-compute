@@ -121,18 +121,16 @@ stepFunctions:
                     Payload.$: "$"
                   OutputPath: "$.Payload"
                   End: true
-            ResultPath: "$.batchResults"
-            Next: FilterParams
-          FilterParams:
-            Type: Pass
-            Parameters: {
-              "jobId.$": "$.jobId",
-              "jobParameters.$": "$.jobParameters",
-              "numBatches.$": "$.numBatches",
-              "searchTimeoutSecs.$": "$.searchTimeoutSecs",
-              "combinerFunctionName.$": "$.combinerFunctionName",
-              "monitorFunctionName.$": "$.monitorFunctionName",
-              "tasksTableName.$": "$.tasksTableName"
+            ResultSelector: {
+              "jobId.$": "$$.Execution.Input.jobId",
+              "startTime.$": "$$.Execution.Input.startTime",
+              "numBatches.$": "$$.Execution.Input.numBatches",
+              "searchTimeoutSecs.$": "$$.Execution.Input.searchTimeoutSecs",
+              "jobParameters.$": "$$.Execution.Input.jobParameters",
+              "workerFunctionName.$": "$$.Execution.Input.workerFunctionName",
+              "combinerFunctionName.$": "$$.Execution.Input.combinerFunctionName",
+              "monitorFunctionName.$": "$$.Execution.Input.monitorFunctionName",
+              "tasksTableName.$": "$$.Execution.Input.tasksTableName"
             }
             Next: Monitor
           Monitor:
