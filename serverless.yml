@@ -1,8 +1,10 @@
 service: burst-compute
 
+
 plugins:
   - serverless-bundle
   - serverless-step-functions
+
 
 custom:
   version: ${file(./package.json):version}
@@ -12,6 +14,7 @@ custom:
   tasksTable: ${self:service}-${self:provider.stage}-tasks
   stateMachine: ${self:service}-${self:provider.stage}-lifecycle
   defaultJobTimeoutSecs: 60
+
 
 provider:
   name: aws
@@ -47,10 +50,12 @@ provider:
           - lambda:InvokeFunction
         Resource: "*"
 
+
 package:
   individually: true
   patterns:
     - src/main/nodejs/**
+
 
 functions:
 
@@ -78,6 +83,7 @@ functions:
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
       TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
+
 stepFunctions:
   validate: true # enable pre-deployment definition validation
   stateMachines:
@@ -93,20 +99,19 @@ stepFunctions:
             Type: Map
             InputPath: "$"
             ItemsPath: "$.batches"
-            ItemSelector: {
-              "jobId.$": "$$.Execution.Input.jobId",
-              "startTime.$": "$$.Execution.Input.startTime",
-              "numBatches.$": "$$.Execution.Input.numBatches",
-              "searchTimeoutSecs.$": "$$.Execution.Input.searchTimeoutSecs",
-              "jobParameters.$": "$$.Execution.Input.jobParameters",
-              "workerFunctionName.$": "$$.Execution.Input.workerFunctionName",
-              "combinerFunctionName.$": "$$.Execution.Input.combinerFunctionName",
-              "monitorFunctionName.$": "$$.Execution.Input.monitorFunctionName",
-              "tasksTableName.$": "$$.Execution.Input.tasksTableName",
-              "batchId.$": "$$.Map.Item.Value.batchId",
-              "startIndex.$": "$$.Map.Item.Value.startIndex",
-              "endIndex.$": "$$.Map.Item.Value.endIndex"
-            }
+            ItemSelector:
+              jobId.$: "$$.Execution.Input.jobId"
+              startTime.$: "$$.Execution.Input.startTime"
+              numBatches.$: "$$.Execution.Input.numBatches"
+              searchTimeoutSecs.$: "$$.Execution.Input.searchTimeoutSecs"
+              jobParameters.$: "$$.Execution.Input.jobParameters"
+              workerFunctionName.$: "$$.Execution.Input.workerFunctionName"
+              combinerFunctionName.$: "$$.Execution.Input.combinerFunctionName"
+              monitorFunctionName.$: "$$.Execution.Input.monitorFunctionName"
+              tasksTableName.$: "$$.Execution.Input.tasksTableName"
+              batchId.$: "$$.Map.Item.Value.batchId"
+              startIndex.$: "$$.Map.Item.Value.startIndex"
+              endIndex.$: "$$.Map.Item.Value.endIndex"
             ItemProcessor:
               ProcessorConfig:
                 Mode: DISTRIBUTED
@@ -129,60 +134,32 @@ stepFunctions:
                     TableName.$: "$$.Execution.Input.tasksTableName"
                     Item:
                       jobId.$: "$.jobId"
-                      batchId: {"N.$": "$.batchId"}
+                      batchId: 
+                        N.$: "$.batchId"
                       resultsMimeType.$: "$.resultsMimeType"
                       results.$: "$.results"
-                      nresults: {"N.$": "$.nresults"}
-                      ttl: {"N.$": "$.ttl"}
+                      nresults:
+                        N.$: "$.nresults"
+                      ttl:
+                        N.$: "$.ttl"
                   ResultPath: null
                   End: true
-            ResultSelector: {
-              "jobId.$": "$$.Execution.Input.jobId",
-              "startTime.$": "$$.Execution.Input.startTime",
-              "numBatches.$": "$$.Execution.Input.numBatches",
-              "searchTimeoutSecs.$": "$$.Execution.Input.searchTimeoutSecs",
-              "jobParameters.$": "$$.Execution.Input.jobParameters",
-              "workerFunctionName.$": "$$.Execution.Input.workerFunctionName",
-              "combinerFunctionName.$": "$$.Execution.Input.combinerFunctionName",
-              "monitorFunctionName.$": "$$.Execution.Input.monitorFunctionName",
-              "tasksTableName.$": "$$.Execution.Input.tasksTableName"
-            }
-            Next: Monitor
-          Monitor:
-            Type: Task
-            Resource: arn:aws:states:::lambda:invoke
-            Parameters:
-              FunctionName.$: "$$.Execution.Input.monitorFunctionName"
-              Payload.$: "$"
-            OutputPath: "$.Payload"
-            Retry:
-              - ErrorEquals: 
-                - Lambda.TooManyRequestsException
-                IntervalSeconds: 1
-                MaxAttempts: 100
+            ResultSelector:
+              jobId.$: "$$.Execution.Input.jobId"
+              startTime.$: "$$.Execution.Input.startTime"
+              numBatches.$: "$$.Execution.Input.numBatches"
+              searchTimeoutSecs.$: "$$.Execution.Input.searchTimeoutSecs"
+              jobParameters.$: "$$.Execution.Input.jobParameters"
+              workerFunctionName.$: "$$.Execution.Input.workerFunctionName"
+              combinerFunctionName.$: "$$.Execution.Input.combinerFunctionName"
+              monitorFunctionName.$: "$$.Execution.Input.monitorFunctionName"
+              tasksTableName.$: "$$.Execution.Input.tasksTableName"
             Catch:
               - ErrorEquals:
                 - States.ALL
-                Next: Combine
-            Next: IsTimedOut
-          IsTimedOut:
-            Type: Choice
-            Choices:
-              - Variable: "$.timedOut"
-                BooleanEquals: true
-                Next: Combine
-            Default: AreWeDoneYet
-          AreWeDoneYet:
-            Type: Choice
-            Choices:
-              - Variable: "$.completed"
-                BooleanEquals: true
-                Next: Combine
-            Default: Wait
-          Wait:
-            Type: Wait
-            Seconds: 1
-            Next: Monitor
+                Next: CombineError
+                ResultPath: "$.fatalErrors[0]"
+            Next: Combine
           Combine:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
@@ -206,6 +183,7 @@ stepFunctions:
           EndState:
             Type: Pass
             End: true
+
 
 resources:
 
