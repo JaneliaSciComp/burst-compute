@@ -106,8 +106,6 @@ stepFunctions:
               searchTimeoutSecs.$: "$$.Execution.Input.searchTimeoutSecs"
               jobParameters.$: "$$.Execution.Input.jobParameters"
               workerFunctionName.$: "$$.Execution.Input.workerFunctionName"
-              combinerFunctionName.$: "$$.Execution.Input.combinerFunctionName"
-              monitorFunctionName.$: "$$.Execution.Input.monitorFunctionName"
               tasksTableName.$: "$$.Execution.Input.tasksTableName"
               batchId.$: "$$.Map.Item.Value.batchId"
               startIndex.$: "$$.Map.Item.Value.startIndex"
@@ -144,22 +142,44 @@ stepFunctions:
                         N.$: "$.ttl"
                   ResultPath: null
                   End: true
-            ResultSelector:
-              jobId.$: "$$.Execution.Input.jobId"
-              startTime.$: "$$.Execution.Input.startTime"
-              numBatches.$: "$$.Execution.Input.numBatches"
-              searchTimeoutSecs.$: "$$.Execution.Input.searchTimeoutSecs"
-              jobParameters.$: "$$.Execution.Input.jobParameters"
-              workerFunctionName.$: "$$.Execution.Input.workerFunctionName"
-              combinerFunctionName.$: "$$.Execution.Input.combinerFunctionName"
-              monitorFunctionName.$: "$$.Execution.Input.monitorFunctionName"
-              tasksTableName.$: "$$.Execution.Input.tasksTableName"
+            ResultPath: null
             Catch:
               - ErrorEquals:
                 - States.ALL
                 Next: CombineError
                 ResultPath: "$.fatalErrors[0]"
-            Next: Combine
+            Next: AreWeDone
+          AreWeDone:
+            Type: Choice
+            Choices:
+              - Variable: "$.lastBatchId"
+                NumericLessThanPath: "$.numBatches"
+                Next: DispatchNextJobs
+            Default: Combine
+          DispatchNextJobs:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName.$: "$$.Execution.Input.dispatchFunctionName"
+              InvocationType: "RequestResponse"
+              Payload:
+                jobId.$: "$.jobId"
+                datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
+                datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
+                batchSize.$: "$.batchSize"
+                startTime.$: "$.startTime"
+                firstBatchId.$: "$.firstBatchId"
+                lastBatchId.$: "$.lastBatchId"
+                numBatches.$: "$.numBatches"
+                searchTimeoutSecs.$: "$.searchTimeoutSecs"
+                jobParameters.$: "$.jobParameters"
+                dispatchFunctionName.$: "$.dispatchFunctionName"
+                workerFunctionName.$: "$.workerFunctionName"
+                combinerFunctionName.$: "$.combinerFunctionName"
+                monitorFunctionName.$: "$.monitorFunctionName"
+                tasksTableName.$: "$.tasksTableName"
+            OutputPath: "$.Payload"
+            Next: MapJobs
           Combine:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
