@@ -185,7 +185,16 @@ stepFunctions:
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
               FunctionName.$: "$$.Execution.Input.combinerFunctionName"
-              Payload.$: "$"
+              Payload:
+                jobId.$: "$.jobId"
+                datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
+                datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
+                batchSize.$: "$.batchSize"
+                startTime.$: "$.startTime"
+                numBatches.$: "$.numBatches"
+                searchTimeoutSecs.$: "$.searchTimeoutSecs"
+                jobParameters.$: "$.jobParameters"
+                tasksTableName.$: "$.tasksTableName"
             OutputPath: "$"
             Catch:
               - ErrorEquals:
@@ -198,7 +207,17 @@ stepFunctions:
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
               FunctionName.$: "$$.Execution.Input.combinerFunctionName"
-              Payload.$: "$"
+              Payload:
+                jobId.$: "$.jobId"
+                datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
+                datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
+                batchSize.$: "$.batchSize"
+                startTime.$: "$.startTime"
+                numBatches.$: "$.numBatches"
+                searchTimeoutSecs.$: "$.searchTimeoutSecs"
+                jobParameters.$: "$.jobParameters"
+                tasksTableName.$: "$.tasksTableName"
+                fatalErrors.$: "$.fatalErrors"
             Next: EndState
           EndState:
             Type: Pass
