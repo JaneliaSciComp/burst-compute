@@ -36,6 +36,7 @@ provider:
       - Effect: Allow
         Action:
           - dynamodb:Query
+          - dynamodb:PutItem
         Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.tasksTable}"
       - Effect: Allow
         Action:
@@ -117,9 +118,23 @@ stepFunctions:
                   Resource: arn:aws:states:::lambda:invoke
                   Parameters:
                     FunctionName.$: "$$.Execution.Input.workerFunctionName"
-                    InvocationType: "Event"
+                    InvocationType: "RequestResponse"
                     Payload.$: "$"
                   OutputPath: "$.Payload"
+                  Next: PersistResults
+                PersistResults:
+                  Type: Task
+                  Resource: arn:aws:states:::dynamodb:putItem
+                  Parameters:
+                    TableName.$: "$$.Execution.Input.tasksTableName"
+                    Item:
+                      jobId.$: "$.jobId"
+                      batchId: {"N.$": "$.batchId"}
+                      resultsMimeType.$: "$.resultsMimeType"
+                      results.$: "$.results"
+                      nresults: {"N.$": "$.nresults"}
+                      ttl: {"N.$": "$.ttl"}
+                  ResultPath: null
                   End: true
             ResultSelector: {
               "jobId.$": "$$.Execution.Input.jobId",
