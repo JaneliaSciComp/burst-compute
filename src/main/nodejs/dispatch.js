@@ -17,7 +17,7 @@ const DEFAULTS = {
   batchSize: 50,
   numLevels: 2,
   jobParameters: {},
-  maxParallelism: 4000,
+  maxParallelism: 4608,
 };
 
 const stepFunctionClient = new SFNClient({});

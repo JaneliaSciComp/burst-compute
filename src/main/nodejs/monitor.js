@@ -10,10 +10,10 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 // This Lambda is called by the monitor step function to see if the job is completed.
 // It checks DynamoDB to see if all the tasks are done and if so, returns the completed:true
 // in the result object.
-const monitorJob = async (jobParams) => {
+const monitorJob = async (monitorInput) => {
   // Parameters
-  const { jobId, numBatches, searchTimeoutSecs = JOB_TIMEOUT_SECS } = jobParams;
-  const startTime = moment(jobParams.startTime);
+  const { jobId, numBatches, searchTimeoutSecs = JOB_TIMEOUT_SECS } = monitorInput;
+  const startTime = moment(monitorInput.startTime);
 
   // Find out how many tasks are remaining
   const params = {
@@ -52,7 +52,7 @@ const monitorJob = async (jobParams) => {
   if (numRemaining === 0) {
     console.log(`Job took ${elapsedSecs} seconds`);
     return {
-      ...jobParams,
+      ...monitorInput,
       elapsedSecs,
       numRemaining: 0,
       completed: true,
@@ -62,7 +62,7 @@ const monitorJob = async (jobParams) => {
   if (elapsedSecs > searchTimeoutSecs) {
     console.log(`Job timed out after ${elapsedSecs} seconds. Completed ${numComplete} of ${numBatches} tasks.`);
     return {
-      ...jobParams,
+      ...monitorInput,
       elapsedSecs,
       numRemaining,
       completed: false,
@@ -71,7 +71,7 @@ const monitorJob = async (jobParams) => {
   }
   console.log(`Job still running after ${elapsedSecs} seconds (${searchTimeoutSecs - elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
   return {
-    ...jobParams,
+    ...monitorInput,
     elapsedSecs,
     numRemaining,
     completed: false,
