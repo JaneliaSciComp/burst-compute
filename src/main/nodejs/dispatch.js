@@ -22,7 +22,7 @@ const DEFAULTS = {
 
 const stepFunctionClient = new SFNClient({});
 
-const defaultConcurrentJobs = parseInt(DEFAULT_CONCURRENT_JOBS) || 4000;
+const defaultConcurrentJobs = parseInt(DEFAULT_CONCURRENT_JOBS) || DEFAULTS.maxParallelism;
 
 // Start state machine
 const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName) => {
@@ -118,11 +118,11 @@ const prepareBatchJobs = async (input) => {
     numBatches,
     startTime,
     searchTimeoutSecs,
-    tasksTableName: TASKS_TABLE_NAME,
     dispatchFunctionName: DISPATCH_FUNCTION_NAME,
+    monitorFunctionName: MONITOR_FUNCTION_NAME,
     workerFunctionName,
     combinerFunctionName,
-    monitorFunctionName: MONITOR_FUNCTION_NAME,
+    tasksTableName: TASKS_TABLE_NAME,
     batches: batchesParams.slice(0, nextBatchId - lastBatchId),
   }];
 };

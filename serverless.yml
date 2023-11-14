@@ -163,8 +163,12 @@ stepFunctions:
               FunctionName.$: "$$.Execution.Input.monitorFunctionName"
               Payload:
                 jobId.$: "$.jobId"
+                datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
+                datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
                 batchSize.$: "$.batchSize"
                 startTime.$: "$.startTime"
+                firstBatchId.$: "$.firstBatchId"
+                lastBatchId.$: "$.lastBatchId"
                 numBatches.$: "$.numBatches"
                 searchTimeoutSecs.$: "$.searchTimeoutSecs"
                 jobParameters.$: "$.jobParameters"
@@ -205,10 +209,6 @@ stepFunctions:
                 numBatches.$: "$.numBatches"
                 searchTimeoutSecs.$: "$.searchTimeoutSecs"
                 jobParameters.$: "$.jobParameters"
-                dispatchFunctionName.$: "$.dispatchFunctionName"
-                workerFunctionName.$: "$.workerFunctionName"
-                combinerFunctionName.$: "$.combinerFunctionName"
-                monitorFunctionName.$: "$.monitorFunctionName"
                 tasksTableName.$: "$.tasksTableName"
             OutputPath: "$.Payload"
             Next: MapJobs
