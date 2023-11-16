@@ -12,8 +12,9 @@ custom:
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
+  mapJobsInputsBucket: ${self:service}-${self:provider.stage}-mapjobsinputs
   stateMachine: ${self:service}-${self:provider.stage}-lifecycle
-  defaultJobTimeoutSecs: 60
+  defaultJobTimeoutSecs: 600
 
 
 provider:
@@ -49,6 +50,14 @@ provider:
         Action:
           - lambda:InvokeFunction
         Resource: "*"
+      - Effect: Allow
+        Action:
+          - s3:GetObject
+          - s3:ListBucket
+          - s3:PutObject
+        Resource:
+          - "arn:aws:s3:::${self:custom.mapJobsInputsBucket}"
+          - "arn:aws:s3:::${self:custom.mapJobsInputsBucket}/*"
 
 
 package:
@@ -62,16 +71,26 @@ functions:
   dispatch:
     runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/dispatch.dispatchHandler
-    memorySize: 256
+    memorySize: 128
     # 5 minute timeout
     timeout: 300
     environment:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
-      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatch
+      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatchNextBatches
       MONITOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-monitor
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
+      MAP_JOBS_INPUTS_BUCKET_NAME: ${self:custom.mapJobsInputsBucket}
       TASKS_TABLE_NAME: ${self:custom.tasksTable}
+
+  dispatchNextBatches:
+    runtime: ${self:custom.nodeJSRuntime}
+    handler: src/main/nodejs/dispatch.dispatchNextBatchesHandler
+    memorySize: 128
+    # 5 minute timeout
+    timeout: 300
+    environment:
+      DEBUG: ${self:custom.debug}
 
   monitor:
     runtime: ${self:custom.nodeJSRuntime}
@@ -80,8 +99,6 @@ functions:
     timeout: ${self:custom.defaultJobTimeoutSecs}
     environment:
       DEBUG: ${self:custom.debug}
-      JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
-      TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
 
 stepFunctions:
@@ -98,12 +115,18 @@ stepFunctions:
           MapJobs:
             Type: Map
             InputPath: "$"
-            ItemsPath: "$.batches"
+            ItemReader:
+              Resource: "arn:aws:states:::s3:getObject"
+              ReaderConfig:
+                InputType: JSON
+              Parameters:
+                Bucket.$: "$$.Execution.Input.mapJobsInputBucket"
+                Key.$: "$.inputJobsFile"
             ItemSelector:
               jobId.$: "$$.Execution.Input.jobId"
               startTime.$: "$$.Execution.Input.startTime"
               numBatches.$: "$$.Execution.Input.numBatches"
-              searchTimeoutSecs.$: "$$.Execution.Input.searchTimeoutSecs"
+              jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
               jobParameters.$: "$$.Execution.Input.jobParameters"
               workerFunctionName.$: "$$.Execution.Input.workerFunctionName"
               tasksTableName.$: "$$.Execution.Input.tasksTableName"
@@ -162,17 +185,13 @@ stepFunctions:
             Parameters:
               FunctionName.$: "$$.Execution.Input.monitorFunctionName"
               Payload:
-                jobId.$: "$.jobId"
-                datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
-                datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
-                batchSize.$: "$.batchSize"
-                startTime.$: "$.startTime"
+                jobId.$: "$$.Execution.Input.jobId"
+                startTime.$: "$$.Execution.Input.startTime"
                 firstBatchId.$: "$.firstBatchId"
                 lastBatchId.$: "$.lastBatchId"
-                numBatches.$: "$.numBatches"
-                searchTimeoutSecs.$: "$.searchTimeoutSecs"
-                jobParameters.$: "$.jobParameters"
-                tasksTableName.$: "$.tasksTableName"
+                numBatches.$: "$$.Execution.Input.numBatches"
+                jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
+                tasksTableName.$: "$$.Execution.Input.tasksTableName"
             OutputPath: "$.Payload"
             Retry:
               - ErrorEquals: 
@@ -190,7 +209,7 @@ stepFunctions:
             Choices:
               - Variable: "$.timedOut"
                 BooleanEquals: true
-                Next: Combine
+                Next: CombineError
             Default: DispatchNextJobs
           DispatchNextJobs:
             Type: Task
@@ -199,17 +218,16 @@ stepFunctions:
               FunctionName.$: "$$.Execution.Input.dispatchFunctionName"
               InvocationType: "RequestResponse"
               Payload:
-                jobId.$: "$.jobId"
+                jobId.$: "$$.Execution.Input.jobId"
                 datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
                 datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
-                batchSize.$: "$.batchSize"
-                startTime.$: "$.startTime"
+                batchSize.$: "$$.Execution.Input.batchSize"
                 firstBatchId.$: "$.firstBatchId"
                 lastBatchId.$: "$.lastBatchId"
-                numBatches.$: "$.numBatches"
-                searchTimeoutSecs.$: "$.searchTimeoutSecs"
-                jobParameters.$: "$.jobParameters"
-                tasksTableName.$: "$.tasksTableName"
+                maxParallelism.$: "$$.Execution.Input.maxParallelism"
+                numBatches.$: "$$.Execution.Input.numBatches"
+                jobParameters.$: "$$.Execution.Input.jobParameters"
+                mapJobsInputBucket.$: "$$.Execution.Input.mapJobsInputBucket"
             OutputPath: "$.Payload"
             Next: MapJobs
           Combine:
@@ -218,15 +236,15 @@ stepFunctions:
             Parameters:
               FunctionName.$: "$$.Execution.Input.combinerFunctionName"
               Payload:
-                jobId.$: "$.jobId"
+                jobId.$: "$$.Execution.Input.jobId"
                 datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
                 datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
-                batchSize.$: "$.batchSize"
-                startTime.$: "$.startTime"
-                numBatches.$: "$.numBatches"
-                searchTimeoutSecs.$: "$.searchTimeoutSecs"
-                jobParameters.$: "$.jobParameters"
-                tasksTableName.$: "$.tasksTableName"
+                batchSize.$: "$$.Execution.Input.batchSize"
+                startTime.$: "$$.Execution.Input.startTime"
+                numBatches.$: "$$.Execution.Input.numBatches"
+                jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
+                jobParameters.$: "$$.Execution.Input.jobParameters"
+                tasksTableName.$: "$$.Execution.Input.tasksTableName"
             OutputPath: "$"
             Catch:
               - ErrorEquals:
@@ -240,15 +258,15 @@ stepFunctions:
             Parameters:
               FunctionName.$: "$$.Execution.Input.combinerFunctionName"
               Payload:
-                jobId.$: "$.jobId"
+                jobId.$: "$$.Execution.Input.jobId"
                 datasetStartIndex.$: "$$.Execution.Input.datasetStartIndex"
                 datasetEndIndex.$: "$$.Execution.Input.datasetEndIndex"
-                batchSize.$: "$.batchSize"
-                startTime.$: "$.startTime"
-                numBatches.$: "$.numBatches"
-                searchTimeoutSecs.$: "$.searchTimeoutSecs"
-                jobParameters.$: "$.jobParameters"
-                tasksTableName.$: "$.tasksTableName"
+                batchSize.$: "$$.Execution.Input.batchSize"
+                startTime.$: "$$.Execution.Input.startTime"
+                numBatches.$: "$$.Execution.Input.numBatches"
+                jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
+                jobParameters.$: "$$.Execution.Input.jobParameters"
+                tasksTableName.$: "$$.Execution.Input.tasksTableName"
                 fatalErrors.$: "$.fatalErrors"
             Next: EndState
           EndState:
@@ -278,13 +296,25 @@ resources:
           AttributeName: ttl
           Enabled: true
 
+    MapJobsInputsBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Delete
+      Properties:
+        BucketName: ${self:custom.mapJobsInputsBucket}
+        AccessControl: Private
+          
+
   Outputs:
     TasksTable:
       Description: Name of the tasks table
       Value:
-        "Ref": TasksTable
+        Ref: TasksTable
       Export:
         Name: BurstComputeTasksTable-${self:provider.stage}
+    MapJobsInputsBucket:
+      Description: Name of the bucket containing inputs for distributed map jobs
+      Value:
+        Ref: MapJobsInputsBucket
     JobLifecycleStateMachine:
       Description: The ARN of the state machine
       Value:

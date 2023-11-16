@@ -102,12 +102,11 @@ The dispatch function expects the following input object:
 {
   workerFunctionName: "Name or ARN of the user-defined worker Lambda function",
   combinerFunctionName: "Name or ARN of the user-defined combiner Lambda function",
-  startIndex: "Start index to process, inclusive, e.g. 0",
-  endIndex: "End index to process, exclusive, e.g. N if you have N items to process",
+  datasetStartIndex: "Start index to process, inclusive, e.g. 0",
+  datasetEndIndex: "End index to process, exclusive, e.g. N if you have N items to process",
   batchSize: "How many items should each worker instance process",
-  numLevels: "Number of levels in the dispatcher tree, e.g. 1 or 2",
   maxParallelism: "Maximum number of batches to run",
-  searchTimeoutSecs: "Number of seconds to wait for job to finish before ending with a timeout",
+  jobsTimeoutSecs: "Number of seconds to wait for job to finish before ending with a timeout",
   jobParameters: {
     // Any parameters that each worker should receive
   },

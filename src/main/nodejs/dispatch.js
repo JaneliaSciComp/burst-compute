@@ -1,13 +1,14 @@
+import moment from 'moment';
 import { v1 as uuidv1 } from 'uuid';
-
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SFNClient, StartExecutionCommand } from '@aws-sdk/client-sfn';
 
-const DEBUG = !!process.env.DEBUG;
 const {
   DISPATCH_FUNCTION_NAME,
   MONITOR_FUNCTION_NAME,
   STATE_MACHINE_ARN,
   JOB_TIMEOUT_SECS,
+  MAP_JOBS_INPUTS_BUCKET_NAME,
   TASKS_TABLE_NAME,
   DEFAULT_CONCURRENT_JOBS,
 } = process.env;
@@ -17,10 +18,11 @@ const DEFAULTS = {
   batchSize: 50,
   numLevels: 2,
   jobParameters: {},
-  maxParallelism: 4608,
+  maxParallelism: 20608,
 };
 
-const stepFunctionClient = new SFNClient({});
+const s3Client = new S3Client();
+const stepFunctionClient = new SFNClient();
 
 const defaultConcurrentJobs = parseInt(DEFAULT_CONCURRENT_JOBS) || DEFAULTS.maxParallelism;
 
@@ -36,35 +38,80 @@ const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName
   return result;
 };
 
-const computeNumBatches = (inputBatchSize, datasetSize) => {
-  const numBatches = Math.ceil(datasetSize / inputBatchSize);
-  console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${inputBatchSize}`);
+const putObject = async (Bucket, Key, object) => {
+  const inputsTTL = 15 * 60; // 15 min TTL
 
-  return [inputBatchSize, numBatches];
+  const res = await s3Client.send(new PutObjectCommand({
+    Bucket,
+    Key,
+    Body: JSON.stringify(object),
+    ContentType: 'application/json',
+    Expires: moment(new Date()).add(inputsTTL, 'm').toDate(),
+  }));
+
+  return res;
+};
+
+const computeNumBatches = (batchSize, datasetSize) => {
+  const numBatches = Math.ceil(datasetSize / batchSize);
+  console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${batchSize}`);
+
+  return numBatches;
+};
+
+const prepareWorkflowParams = (input) => {
+  // This next log statement is parsed by the analyzer. DO NOT CHANGE.
+  console.log('Input:', input);
+  const {
+    workerFunctionName,
+    combinerFunctionName,
+    jobsTimeoutSecs = JOB_TIMEOUT_SECS,
+    jobParameters = DEFAULTS.jobParameters,
+  } = input;
+
+  const datasetStartIndex = parseInt(input.datasetStartIndex);
+  const datasetEndIndex = parseInt(input.datasetEndIndex);
+  const maxParallelism = parseInt(input.maxParallelism) || DEFAULTS.maxParallelism;
+  const batchSize = parseInt(input.batchSize) || DEFAULTS.batchSize;
+  const numBatches = computeNumBatches(batchSize, datasetEndIndex - datasetStartIndex);
+  const startTime = new Date().toISOString();
+
+  const maxConcurrentJobs = defaultConcurrentJobs < maxParallelism
+    ? defaultConcurrentJobs
+    : maxParallelism;
+
+  return {
+    jobId: uuidv1(),
+    datasetStartIndex, // global start index
+    datasetEndIndex, // global end index
+    jobParameters,
+    maxParallelism: maxConcurrentJobs,
+    batchSize,
+    numBatches,
+    startTime,
+    jobsTimeoutSecs,
+    dispatchFunctionName: DISPATCH_FUNCTION_NAME,
+    monitorFunctionName: MONITOR_FUNCTION_NAME,
+    workerFunctionName,
+    combinerFunctionName,
+    mapJobsInputBucket: MAP_JOBS_INPUTS_BUCKET_NAME,
+    tasksTableName: TASKS_TABLE_NAME,
+  };
 };
 
 const prepareBatchJobs = async (input) => {
-  // This next log statement is parsed by the analyzer. DO NOT CHANGE.
-  console.log('Input:', input);
+  console.log('Prepare next batch:', input);
 
-  // User defined parameters
   const {
-    jobId, workerFunctionName, combinerFunctionName,
-    searchTimeoutSecs = JOB_TIMEOUT_SECS,
+    jobId,
+    datasetStartIndex,
+    datasetEndIndex,
+    maxParallelism,
+    batchSize,
+    lastBatchId = 0,
+    numBatches,
+    mapJobsInputBucket,
   } = input;
-  const datasetStartIndex = parseInt(input.datasetStartIndex);
-  const datasetEndIndex = parseInt(input.datasetEndIndex);
-  const lastBatchId = parseInt(input.lastBatchId) || 0;
-  const inputNumBatches = parseInt(input.numBatches) || -1;
-
-  // Parameters which have defaults
-  const jobParameters = input.jobParameters || DEFAULTS.jobParameters;
-  const maxParallelism = input.maxParallelism || DEFAULTS.maxParallelism;
-  const inputBatchSize = parseInt(input.batchSize) || DEFAULTS.batchSize;
-
-  const [batchSize, numBatches] = jobId === undefined || jobId === null
-    ? computeNumBatches(inputBatchSize, datasetEndIndex - datasetStartIndex)
-    : [inputBatchSize, inputNumBatches];
 
   const batchRanges = Array.from(
     { length: (datasetEndIndex - datasetStartIndex) / batchSize + 1 },
@@ -84,111 +131,63 @@ const prepareBatchJobs = async (input) => {
     })
     .filter((batchParams) => batchParams.batchId >= lastBatchId);
 
-  const maxConcurrentJobs = defaultConcurrentJobs < maxParallelism
-    ? defaultConcurrentJobs
-    : maxParallelism;
-
-  console.log(
-    `Max concurrent jobs: ${maxConcurrentJobs}, `,
-    `nbatches: ${numBatches}`,
-    `batches length: ${batchesParams.length}`,
-  );
-
-  const nextBatchId = batchesParams.length > maxConcurrentJobs
-    ? lastBatchId + maxConcurrentJobs
-    : numBatches;
-
-  console.log(`Next batch: ${lastBatchId} - ${nextBatchId}`);
-  const now = new Date();
-  const startTime = now.toISOString();
+  console.log(`Found ${batchesParams.length} remaining batches`);
 
   // if there are too many batches we limit the dispatch to a subset of the batchjobs
   // and the state machine will take care of invoking the next batches.
-  // this limitation is because of two reasons
-  // 1. the max lambda concurrency
-  // 2. the size of the step function input which now is limited to 256K
-  //    the lambdas support larger inputs but for that we have to dump the batches on an S3 bucket
-  return [jobId, {
-    datasetStartIndex, // global start index
-    datasetEndIndex, // global end index
-    jobParameters,
-    batchSize,
+  const nextBatchId = batchesParams.length > maxParallelism
+    ? lastBatchId + maxParallelism
+    : numBatches;
+
+  console.log(`Next batch: ${lastBatchId} - ${nextBatchId}`);
+
+  const batchesToProcess = batchesParams.slice(0, nextBatchId - lastBatchId);
+  const inputJobsFile = `${jobId}-${lastBatchId}-${nextBatchId}.json`;
+  await putObject(mapJobsInputBucket, inputJobsFile, batchesToProcess);
+  return {
+    ...input,
     firstBatchId: lastBatchId,
     lastBatchId: nextBatchId,
-    numBatches,
-    startTime,
-    searchTimeoutSecs,
-    dispatchFunctionName: DISPATCH_FUNCTION_NAME,
-    monitorFunctionName: MONITOR_FUNCTION_NAME,
-    workerFunctionName,
-    combinerFunctionName,
-    tasksTableName: TASKS_TABLE_NAME,
-    batches: batchesParams.slice(0, nextBatchId - lastBatchId),
-  }];
+    inputJobsFile,
+  };
 };
 
-// This Lambda is called recursively to dispatch all of the burst workers.
+// This handler is called first time to begin the workflow
 export const dispatchHandler = async (event) => {
-  try {
-    console.log('Input event:', JSON.stringify(event));
+  // the next log statement is parsed by the analyzer. DO NOT CHANGE.
+  console.log('Root Dispatcher');
 
-    const [jobId, batchJobsInputs] = await prepareBatchJobs(event);
-    if (jobId === undefined || jobId === null) {
-      // if this is the first call - no jobId yet - start the workflow
-      // also this will be considered the root dispatcher,
-      // since this starts the state machine
-      // the next log statement is parsed by the analyzer. DO NOT CHANGE.
-      console.log('Root Dispatcher');
+  // First time we prepare all workflow parameters
+  // including the batches that need to be processed
+  const commonWorkflowParams = prepareWorkflowParams(event);
 
-      const workflowParams = {
-        jobId: uuidv1(),
-        ...batchJobsInputs,
-      };
-      console.log(
-        `Starting state machine ${STATE_MACHINE_ARN}`,
-        `job ${workflowParams.jobId} => ${workflowParams.numBatches} batches `,
-        workflowParams,
-        ` - stringified size: ${JSON.stringify(workflowParams).length}`,
-      );
-      const startWorkflowRes = await startStepFunction(
-        STATE_MACHINE_ARN,
-        workflowParams,
-        workflowParams.jobId,
-      );
+  const workflowParams = await prepareBatchJobs(commonWorkflowParams);
 
-      // This next log statement is parsed by the analyzer. DO NOT CHANGE.
-      console.log(`Job Id: ${workflowParams.jobId}`);
+  console.log(
+    `Starting state machine ${STATE_MACHINE_ARN}`,
+    `job ${workflowParams.jobId} => ${workflowParams.numBatches} batches `,
+    workflowParams,
+    ` - stringified size: ${JSON.stringify(workflowParams).length}`,
+  );
 
-      return {
-        jobId: workflowParams.jobId,
-        numBatches: workflowParams.numBatches,
-        workflowArn: startWorkflowRes.executionArn,
-      };
-    }
-    // else dispatch the next batches
+  const startWorkflowRes = await startStepFunction(
+    STATE_MACHINE_ARN,
+    workflowParams,
+    workflowParams.jobId,
+  );
 
-    // This next log statement is parsed by the analyzer. DO NOT CHANGE.
-    console.log(
-      'Dispatching Batch Id: ',
-      `${batchJobsInputs.firstBatchId}-${batchJobsInputs.lastBatchId}`,
-    );
+  // This next log statement is parsed by the analyzer. DO NOT CHANGE.
+  console.log(`Job Id: ${workflowParams.jobId}`);
 
-    if (DEBUG) {
-      console.log(
-        `Dispatch parameters for ${jobId} `,
-        `between ${batchJobsInputs.firstBatchId} to ${batchJobsInputs.lastBatchId} `,
-        `out of total ${batchJobsInputs.numBatches} batches `,
-        batchJobsInputs,
-        ` - stringified size: ${JSON.stringify(batchJobsInputs).length}`,
-      );
-    }
+  return {
+    jobId: workflowParams.jobId,
+    numBatches: workflowParams.numBatches,
+    workflowArn: startWorkflowRes.executionArn,
+  };
+};
 
-    return {
-      jobId,
-      ...batchJobsInputs,
-    };
-  } catch (err) {
-    console.error('Error dispatching batches for', event, err);
-    throw err;
-  }
+export const dispatchNextBatchesHandler = async (event) => {
+  const nextBatchParams = await prepareBatchJobs(event);
+  console.log(`Next batch for ${event.jobId}`, nextBatchParams);
+  return nextBatchParams;
 };

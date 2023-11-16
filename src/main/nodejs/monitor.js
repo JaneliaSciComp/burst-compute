@@ -1,8 +1,6 @@
+import moment from 'moment';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import moment from 'moment';
-
-const { JOB_TIMEOUT_SECS, TASKS_TABLE_NAME } = process.env;
 
 const ddbClient = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
@@ -12,12 +10,18 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 // in the result object.
 const monitorJob = async (monitorInput) => {
   // Parameters
-  const { jobId, numBatches, searchTimeoutSecs = JOB_TIMEOUT_SECS } = monitorInput;
+  const {
+    jobId,
+    numBatches,
+    jobsTimeoutSecs,
+    tasksTableName,
+  } = monitorInput;
+
   const startTime = moment(monitorInput.startTime);
 
   // Find out how many tasks are remaining
   const params = {
-    TableName: TASKS_TABLE_NAME,
+    TableName: tasksTableName,
     ConsistentRead: true,
     Select: 'COUNT',
     KeyConditionExpression: 'jobId = :jobId',
@@ -59,7 +63,7 @@ const monitorJob = async (monitorInput) => {
       timedOut: false,
     };
   }
-  if (elapsedSecs > searchTimeoutSecs) {
+  if (elapsedSecs > jobsTimeoutSecs) {
     console.log(`Job timed out after ${elapsedSecs} seconds. Completed ${numComplete} of ${numBatches} tasks.`);
     return {
       ...monitorInput,
@@ -69,7 +73,7 @@ const monitorJob = async (monitorInput) => {
       timedOut: true,
     };
   }
-  console.log(`Job still running after ${elapsedSecs} seconds (${searchTimeoutSecs - elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
+  console.log(`Job still running after ${elapsedSecs} seconds (${jobsTimeoutSecs - elapsedSecs}s remaining). Completed ${numComplete} of ${numBatches} tasks.`);
   return {
     ...monitorInput,
     elapsedSecs,
