@@ -174,11 +174,18 @@ stepFunctions:
             Next: AreWeDone
           AreWeDone:
             Type: Choice
+            Comment: Check if the computation completed
             Choices:
               - Variable: "$.lastBatchId"
                 NumericLessThanPath: "$.numBatches"
                 Next: Monitor
-            Default: Combine
+            Default: PrepForCombine
+          PrepForCombine:
+            Type: Pass
+            Comment: Inject completed attribute
+            Result:
+              completed: true
+            Next: Combine
           Monitor:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
@@ -242,6 +249,7 @@ stepFunctions:
                 batchSize.$: "$$.Execution.Input.batchSize"
                 startTime.$: "$$.Execution.Input.startTime"
                 numBatches.$: "$$.Execution.Input.numBatches"
+                completed.$: "$.completed"
                 jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
                 jobParameters.$: "$$.Execution.Input.jobParameters"
                 tasksTableName.$: "$$.Execution.Input.tasksTableName"

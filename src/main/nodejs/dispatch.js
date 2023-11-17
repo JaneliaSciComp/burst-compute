@@ -18,7 +18,7 @@ const DEFAULTS = {
   batchSize: 50,
   numLevels: 2,
   jobParameters: {},
-  maxParallelism: 20608,
+  maxParallelism: 4096,
 };
 
 const s3Client = new S3Client();
@@ -52,11 +52,27 @@ const putObject = async (Bucket, Key, object) => {
   return res;
 };
 
-const computeNumBatches = (batchSize, datasetSize) => {
+const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   const numBatches = Math.ceil(datasetSize / batchSize);
   console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${batchSize}`);
 
-  return numBatches;
+  if (numBatches > maxParallelism) {
+    const adjustBatchSize = Math.ceil(datasetSize / maxParallelism);
+    const adjustedNBatches = Math.ceil(datasetSize / adjustBatchSize);
+
+    console.log(
+      `Partition ${datasetSize} dataset into ${adjustedNBatches} batches `,
+      `of size ${adjustBatchSize} after caping the number of jobs to ${maxParallelism}`,
+    );
+    return {
+      numBatches: adjustedNBatches,
+      batchSize: adjustBatchSize,
+    };
+  }
+  return {
+    numBatches,
+    batchSize,
+  };
 };
 
 const prepareWorkflowParams = (input) => {
@@ -72,13 +88,18 @@ const prepareWorkflowParams = (input) => {
   const datasetStartIndex = parseInt(input.datasetStartIndex);
   const datasetEndIndex = parseInt(input.datasetEndIndex);
   const maxParallelism = parseInt(input.maxParallelism) || DEFAULTS.maxParallelism;
-  const batchSize = parseInt(input.batchSize) || DEFAULTS.batchSize;
-  const numBatches = computeNumBatches(batchSize, datasetEndIndex - datasetStartIndex);
-  const startTime = new Date().toISOString();
-
+  const inputBatchSize = parseInt(input.batchSize) || DEFAULTS.batchSize;
   const maxConcurrentJobs = defaultConcurrentJobs < maxParallelism
     ? defaultConcurrentJobs
     : maxParallelism;
+
+  const { numBatches, batchSize } = computeNumBatches(
+    inputBatchSize,
+    datasetEndIndex - datasetStartIndex,
+    maxConcurrentJobs,
+  );
+
+  const startTime = new Date().toISOString();
 
   return {
     jobId: uuidv1(),
