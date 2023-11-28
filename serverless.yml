@@ -8,17 +8,19 @@ plugins:
 
 custom:
   version: ${file(./package.json):version}
-  nodeJSRuntime: nodejs18.x
   tracing: false
   debug: true
   tasksTable: ${self:service}-${self:provider.stage}-tasks
   mapJobsInputsBucket: ${self:service}-${self:provider.stage}-mapjobsinputs
   stateMachine: ${self:service}-${self:provider.stage}-lifecycle
   defaultJobTimeoutSecs: 600
+  maxConcurrentJobs: 5000
 
 
 provider:
   name: aws
+  architecture: arm64
+  runtime: nodejs18.x
   region: ${opt:region, "us-east-1"}
   stage: ${opt:stage, "dev"}
   tags:
@@ -69,7 +71,6 @@ package:
 functions:
 
   dispatch:
-    runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/dispatch.dispatchHandler
     memorySize: 128
     # 5 minute timeout
@@ -77,6 +78,7 @@ functions:
     environment:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
+      DEFAULT_CONCURRENT_JOBS: ${self:custom.maxConcurrentJobs}
       DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatchNextBatches
       MONITOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-monitor
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
@@ -84,7 +86,6 @@ functions:
       TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
   dispatchNextBatches:
-    runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/dispatch.dispatchNextBatchesHandler
     memorySize: 128
     # 5 minute timeout
@@ -93,7 +94,6 @@ functions:
       DEBUG: ${self:custom.debug}
 
   monitor:
-    runtime: ${self:custom.nodeJSRuntime}
     handler: src/main/nodejs/monitor.monitorHandler
     memorySize: 128
     timeout: ${self:custom.defaultJobTimeoutSecs}

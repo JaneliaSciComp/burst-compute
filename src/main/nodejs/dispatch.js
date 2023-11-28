@@ -16,7 +16,7 @@ const {
 const DEFAULTS = {
   level: 0,
   batchSize: 50,
-  numLevels: 2,
+  numIterations: 1,
   jobParameters: {},
   maxParallelism: 4096,
 };
@@ -57,7 +57,8 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${batchSize}`);
 
   if (numBatches > maxParallelism) {
-    const adjustBatchSize = Math.ceil(datasetSize / maxParallelism);
+    const { numIterations = 1 } = DEFAULTS;
+    const adjustBatchSize = Math.ceil(datasetSize / numIterations / maxParallelism);
     const adjustedNBatches = Math.ceil(datasetSize / adjustBatchSize);
 
     console.log(
