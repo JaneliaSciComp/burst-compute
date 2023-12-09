@@ -1,7 +1,7 @@
 # Burst Compute Framework
 
 [![DOI](https://zenodo.org/badge/301732359.svg)](https://zenodo.org/badge/latestdoi/301732359)
-![node.js workflow](https://github.com/github/docs/actions/workflows/node.js.yml/badge.svg)
+![CI workflow](https://github.com/JaneliaSciComp/burst-compute/actions/workflows/node.js.yml/badge.svg)
 
 Serverless burst-compute implementation for AWS, using only native AWS services.
 
