@@ -1,3 +1,4 @@
+org: janelia
 service: burst-compute
 
 
@@ -7,12 +8,16 @@ plugins:
 
 
 custom:
+  org: ${opt:org, self:org}
   version: ${file(./package.json):version}
   tracing: false
   debug: true
-  tasksTable: ${self:service}-${self:provider.stage}-tasks
-  mapJobsInputsBucket: ${self:service}-${self:provider.stage}-mapjobsinputs
-  stateMachine: ${self:service}-${self:provider.stage}-lifecycle
+  dispatchFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-dispatch
+  dispatchNextBatchesFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-dispatchNextBatches
+  monitorFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-monitor
+  tasksTable: ${self:custom.org}-${self:service}-${self:provider.stage}-tasks
+  mapJobsInputsBucketName: ${self:custom.org}-${self:service}-${self:provider.stage}-mapjobsinputs
+  stateMachine: ${self:custom.org}-${self:service}-${self:provider.stage}-lifecycle
   defaultJobTimeoutSecs: 600
   maxConcurrentJobs: 5000
 
@@ -33,6 +38,7 @@ provider:
     DEVELOPER: ${env:USER}
     STAGE: ${self:provider.stage}
   tracing:
+    apiGateway: false
     lambda: ${self:custom.tracing}
   environment:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
@@ -58,8 +64,8 @@ provider:
           - s3:ListBucket
           - s3:PutObject
         Resource:
-          - "arn:aws:s3:::${self:custom.mapJobsInputsBucket}"
-          - "arn:aws:s3:::${self:custom.mapJobsInputsBucket}/*"
+          - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}"
+          - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}/*"
 
 
 package:
@@ -71,6 +77,7 @@ package:
 functions:
 
   dispatch:
+    name: ${self:custom.dispatchFunctionName}
     handler: src/main/nodejs/dispatch.dispatchHandler
     memorySize: 128
     # 5 minute timeout
@@ -79,13 +86,14 @@ functions:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
       DEFAULT_CONCURRENT_JOBS: ${self:custom.maxConcurrentJobs}
-      DISPATCH_FUNCTION_NAME: ${self:service}-${self:provider.stage}-dispatchNextBatches
-      MONITOR_FUNCTION_NAME: ${self:service}-${self:provider.stage}-monitor
+      DISPATCH_FUNCTION_NAME: ${self:custom.dispatchNextBatchesFunctionName}
+      MONITOR_FUNCTION_NAME: ${self:custom.monitorFunctionName}
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
-      MAP_JOBS_INPUTS_BUCKET_NAME: ${self:custom.mapJobsInputsBucket}
+      MAP_JOBS_INPUTS_BUCKET_NAME: ${self:custom.mapJobsInputsBucketName}
       TASKS_TABLE_NAME: ${self:custom.tasksTable}
 
   dispatchNextBatches:
+    name: ${self:custom.dispatchNextBatchesFunctionName}
     handler: src/main/nodejs/dispatch.dispatchNextBatchesHandler
     memorySize: 128
     # 5 minute timeout
@@ -94,6 +102,7 @@ functions:
       DEBUG: ${self:custom.debug}
 
   monitor:
+    name: ${self:custom.monitorFunctionName}
     handler: src/main/nodejs/monitor.monitorHandler
     memorySize: 128
     timeout: ${self:custom.defaultJobTimeoutSecs}
@@ -308,7 +317,7 @@ resources:
       Type: AWS::S3::Bucket
       DeletionPolicy: Delete
       Properties:
-        BucketName: ${self:custom.mapJobsInputsBucket}
+        BucketName: ${self:custom.mapJobsInputsBucketName}
         AccessControl: Private
           
 

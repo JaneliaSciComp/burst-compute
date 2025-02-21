@@ -9,8 +9,8 @@
   },
   "private": true,
   "scripts": {
-    "sls": "./node_modules/serverless/bin/serverless.js",
-    "lint": "./node_modules/.bin/eslint *.js",
+    "sls": "sls",
+    "lint": "npx eslint src/main/nodejs",
     "test": "jest"
   },
   "dependencies": {
@@ -25,13 +25,13 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
-    "@babel/eslint-parser":"^7.22.15",
+    "@babel/eslint-parser":"^7.26.8",
     "eslint": "^8.56.0",
     "eslint-config-airbnb": "^19.0.4",
     "eslint-plugin-import": "^2.31.0",
     "jest": "^29.7.0",
-    "serverless": "^3.36.0",
-    "serverless-bundle": "^6.0.0",
-    "serverless-step-functions": "^3.17.0"
+    "serverless": "^3.40.0",
+    "serverless-bundle": "^6.3.1",
+    "serverless-step-functions": "^3.21.2"
   }
 }
