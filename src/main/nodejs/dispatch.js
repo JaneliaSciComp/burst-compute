@@ -19,6 +19,7 @@ const DEFAULTS = {
   numIterations: 1,
   jobParameters: {},
   maxParallelism: 4096,
+  toleratedPercentageFailure: 10,
 };
 
 const s3Client = new S3Client();
@@ -39,14 +40,14 @@ const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName
 };
 
 const putObject = async (Bucket, Key, object) => {
-  const inputsTTL = 15 * 60; // 15 min TTL
+  const inputsTTL = 15; // 15 min TTL
 
   const res = await s3Client.send(new PutObjectCommand({
     Bucket,
     Key,
     Body: JSON.stringify(object),
     ContentType: 'application/json',
-    Expires: moment(new Date()).add(inputsTTL, 'm').toDate(),
+    Expires: moment(new Date()).add(inputsTTL, 'minutes').toDate(),
   }));
 
   return res;
@@ -89,6 +90,9 @@ const prepareWorkflowParams = (input) => {
   const datasetStartIndex = parseInt(input.datasetStartIndex);
   const datasetEndIndex = parseInt(input.datasetEndIndex);
   const maxParallelism = parseInt(input.maxParallelism) || DEFAULTS.maxParallelism;
+  const toleratedPercentageFailure = input.toleratedPercentageFailure
+    ? parseInt(input.toleratedPercentageFailure)
+    : DEFAULTS.toleratedPercentageFailure;
   const inputBatchSize = parseInt(input.batchSize) || DEFAULTS.batchSize;
   const maxConcurrentJobs = defaultConcurrentJobs < maxParallelism
     ? defaultConcurrentJobs
@@ -102,12 +106,13 @@ const prepareWorkflowParams = (input) => {
 
   const startTime = new Date().toISOString();
 
-  return {
+  const workflowInputs = {
     jobId: uuidv1(),
     datasetStartIndex, // global start index
     datasetEndIndex, // global end index
     jobParameters,
     maxParallelism: maxConcurrentJobs,
+    toleratedPercentageFailure,
     batchSize,
     numBatches,
     startTime,
@@ -119,6 +124,8 @@ const prepareWorkflowParams = (input) => {
     mapJobsInputBucket: MAP_JOBS_INPUTS_BUCKET_NAME,
     tasksTableName: TASKS_TABLE_NAME,
   };
+  console.log('Workflow inputs:', workflowInputs);
+  return workflowInputs;
 };
 
 const prepareBatchJobs = async (input) => {

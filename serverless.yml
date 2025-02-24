@@ -63,6 +63,7 @@ provider:
           - s3:GetObject
           - s3:ListBucket
           - s3:PutObject
+          - s3:PutLifecycleConfiguration
         Resource:
           - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}"
           - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}/*"
@@ -142,6 +143,7 @@ stepFunctions:
               batchId.$: "$$.Map.Item.Value.batchId"
               startIndex.$: "$$.Map.Item.Value.startIndex"
               endIndex.$: "$$.Map.Item.Value.endIndex"
+            ToleratedFailurePercentagePath: "$.toleratedPercentageFailure"
             ItemProcessor:
               ProcessorConfig:
                 Mode: DISTRIBUTED
@@ -156,6 +158,16 @@ stepFunctions:
                     InvocationType: "RequestResponse"
                     Payload.$: "$"
                   OutputPath: "$.Payload"
+                  Catch:
+                    - ErrorEquals:
+                      - States.ALL
+                      Next: PersistResults
+                      ResultPath: "$.cause"
+                  Next: NoError
+                NoError:
+                  Type: Pass
+                  Result: ''
+                  ResultPath: "$.cause"
                   Next: PersistResults
                 PersistResults:
                   Type: Task
@@ -168,11 +180,20 @@ stepFunctions:
                         N.$: "$.batchId"
                       resultsMimeType.$: "$.resultsMimeType"
                       results.$: "$.results"
+                      errorCause.$:  "$.cause"
                       nresults:
                         N.$: "$.nresults"
                       ttl:
                         N.$: "$.ttl"
                   ResultPath: null
+                  Retry:
+                    - ErrorEquals:
+                      - DynamoDB.AmazonDynamoDBException
+                      - States.ThrottlingException
+                      IntervalSeconds: 2
+                      MaxAttempts: 3
+                      BackoffRate: 2.0
+
                   End: true
             ResultPath: null
             Catch:

@@ -54,7 +54,7 @@ const monitorJob = async (monitorInput) => {
 
   // Return result for next state input
   if (numRemaining === 0) {
-    console.log(`Job took ${elapsedSecs} seconds`);
+    console.log(`Job completed in ${elapsedSecs} seconds`);
     return {
       ...monitorInput,
       elapsedSecs,
