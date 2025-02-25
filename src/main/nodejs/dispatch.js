@@ -11,14 +11,15 @@ const {
   MAP_JOBS_INPUTS_BUCKET_NAME,
   TASKS_TABLE_NAME,
   DEFAULT_CONCURRENT_JOBS,
+  MAX_BRANCHING_FACTOR,
 } = process.env;
 
 const DEFAULTS = {
   level: 0,
   batchSize: 50,
-  numIterations: 1,
+  maxBranchingFactor: 1,
   jobParameters: {},
-  maxParallelism: 4096,
+  maxParallelism: 5000,
   toleratedPercentageFailure: 10,
 };
 
@@ -26,6 +27,7 @@ const s3Client = new S3Client();
 const stepFunctionClient = new SFNClient();
 
 const defaultConcurrentJobs = parseInt(DEFAULT_CONCURRENT_JOBS) || DEFAULTS.maxParallelism;
+const maxBranchingFactor = parseInt(MAX_BRANCHING_FACTOR) || DEFAULTS.maxBranchingFactor;
 
 // Start state machine
 const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName) => {
@@ -58,8 +60,7 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${batchSize}`);
 
   if (numBatches > maxParallelism) {
-    const { numIterations = 1 } = DEFAULTS;
-    const adjustBatchSize = Math.ceil(datasetSize / numIterations / maxParallelism);
+    const adjustBatchSize = Math.ceil(datasetSize / maxBranchingFactor / maxParallelism);
     const adjustedNBatches = Math.ceil(datasetSize / adjustBatchSize);
 
     console.log(

@@ -15,11 +15,13 @@ custom:
   dispatchFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-dispatch
   dispatchNextBatchesFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-dispatchNextBatches
   monitorFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-monitor
+  cleanupFunctionName: ${self:custom.org}-${self:service}-${self:provider.stage}-cleanupBatch
   tasksTable: ${self:custom.org}-${self:service}-${self:provider.stage}-tasks
   mapJobsInputsBucketName: ${self:custom.org}-${self:service}-${self:provider.stage}-mapjobsinputs
   stateMachine: ${self:custom.org}-${self:service}-${self:provider.stage}-lifecycle
   defaultJobTimeoutSecs: 600
-  maxConcurrentJobs: 5000
+  maxConcurrentJobs: ${env:MAX_PARALLELISM, 5000}
+  maxBranchingFactor: ${env:MAX_BRANCHING_FACTOR, 2}
 
 
 provider:
@@ -63,7 +65,7 @@ provider:
           - s3:GetObject
           - s3:ListBucket
           - s3:PutObject
-          - s3:PutLifecycleConfiguration
+          - s3:DeleteObject
         Resource:
           - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}"
           - "arn:aws:s3:::${self:custom.mapJobsInputsBucketName}/*"
@@ -87,6 +89,7 @@ functions:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
       DEFAULT_CONCURRENT_JOBS: ${self:custom.maxConcurrentJobs}
+      MAX_BRANCHING_FACTOR: ${self:custom.maxBranchingFactor}
       DISPATCH_FUNCTION_NAME: ${self:custom.dispatchNextBatchesFunctionName}
       MONITOR_FUNCTION_NAME: ${self:custom.monitorFunctionName}
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
@@ -96,6 +99,15 @@ functions:
   dispatchNextBatches:
     name: ${self:custom.dispatchNextBatchesFunctionName}
     handler: src/main/nodejs/dispatch.dispatchNextBatchesHandler
+    memorySize: 128
+    # 5 minute timeout
+    timeout: 300
+    environment:
+      DEBUG: ${self:custom.debug}
+
+  cleanupBatch:
+    name: ${self:custom.cleanupFunctionName}
+    handler: src/main/nodejs/cleanup.cleanupBatchHandler
     memorySize: 128
     # 5 minute timeout
     timeout: 300
@@ -158,16 +170,6 @@ stepFunctions:
                     InvocationType: "RequestResponse"
                     Payload.$: "$"
                   OutputPath: "$.Payload"
-                  Catch:
-                    - ErrorEquals:
-                      - States.ALL
-                      Next: PersistResults
-                      ResultPath: "$.cause"
-                  Next: NoError
-                NoError:
-                  Type: Pass
-                  Result: ''
-                  ResultPath: "$.cause"
                   Next: PersistResults
                 PersistResults:
                   Type: Task
@@ -180,7 +182,6 @@ stepFunctions:
                         N.$: "$.batchId"
                       resultsMimeType.$: "$.resultsMimeType"
                       results.$: "$.results"
-                      errorCause.$:  "$.cause"
                       nresults:
                         N.$: "$.nresults"
                       ttl:
@@ -193,14 +194,28 @@ stepFunctions:
                       IntervalSeconds: 2
                       MaxAttempts: 3
                       BackoffRate: 2.0
-
                   End: true
             ResultPath: null
             Catch:
               - ErrorEquals:
                 - States.ALL
-                Next: CombineError
-                ResultPath: "$.fatalErrors[0]"
+                Next: CleanupBatchInput
+                ResultPath: "$.batchErrors[0]"
+            Next: CleanupBatchInput
+          CleanupBatchInput:
+            Type: Task
+            Comment: Cleanup batch input file
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters:
+              FunctionName: "${self:custom.cleanupFunctionName}"
+              InvocationType: "RequestResponse"
+              Payload.$: "$"
+            OutputPath: "$.Payload"
+            Catch:
+              - ErrorEquals:
+                - States.ALL
+                Next: AreWeDone # ignore errors
+                ResultPath: null
             Next: AreWeDone
           AreWeDone:
             Type: Choice
@@ -209,8 +224,8 @@ stepFunctions:
               - Variable: "$.lastBatchId"
                 NumericLessThanPath: "$.numBatches"
                 Next: Monitor
-            Default: PrepForCombine
-          PrepForCombine:
+            Default: MarkAsCompleted
+          MarkAsCompleted:
             Type: Pass
             Comment: Inject completed attribute
             Result:
@@ -229,6 +244,7 @@ stepFunctions:
                 numBatches.$: "$$.Execution.Input.numBatches"
                 jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
                 tasksTableName.$: "$$.Execution.Input.tasksTableName"
+                toleratedPercentageFailure.$: "$$.Execution.Input.toleratedPercentageFailure"
             OutputPath: "$.Payload"
             Retry:
               - ErrorEquals: 
@@ -238,8 +254,8 @@ stepFunctions:
             Catch:
               - ErrorEquals:
                 - States.ALL
-                Next: CombineError
-                ResultPath: "$.fatalErrors[0]"
+                Next: IsTimedOut
+                ResultPath: "$.batchErrors[0]"
             Next: IsTimedOut
           IsTimedOut:
             Type: Choice
@@ -265,6 +281,7 @@ stepFunctions:
                 numBatches.$: "$$.Execution.Input.numBatches"
                 jobParameters.$: "$$.Execution.Input.jobParameters"
                 mapJobsInputBucket.$: "$$.Execution.Input.mapJobsInputBucket"
+                toleratedPercentageFailure.$: "$$.Execution.Input.toleratedPercentageFailure"
             OutputPath: "$.Payload"
             Next: MapJobs
           Combine:
@@ -288,7 +305,7 @@ stepFunctions:
               - ErrorEquals:
                 - States.ALL
                 Next: CombineError
-                ResultPath: "$.fatalErrors[0]"
+                ResultPath: "$.batchErrors[0]"
             Next: EndState
           CombineError:
             Type: Task
@@ -305,7 +322,7 @@ stepFunctions:
                 jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
                 jobParameters.$: "$$.Execution.Input.jobParameters"
                 tasksTableName.$: "$$.Execution.Input.tasksTableName"
-                fatalErrors.$: "$.fatalErrors"
+                batchErrors.$: "$.batchErrors"
             Next: EndState
           EndState:
             Type: Pass
