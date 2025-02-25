@@ -1,10 +1,11 @@
-org: janelia
 service: burst-compute
 
+org: janelia
 
 plugins:
   - serverless-bundle
   - serverless-step-functions
+  - serverless-dotenv-plugin
 
 
 custom:
@@ -19,9 +20,15 @@ custom:
   tasksTable: ${self:custom.org}-${self:service}-${self:provider.stage}-tasks
   mapJobsInputsBucketName: ${self:custom.org}-${self:service}-${self:provider.stage}-mapjobsinputs
   stateMachine: ${self:custom.org}-${self:service}-${self:provider.stage}-lifecycle
-  defaultJobTimeoutSecs: 600
   maxConcurrentJobs: ${env:MAX_PARALLELISM, 5000}
   maxBranchingFactor: ${env:MAX_BRANCHING_FACTOR, 2}
+  defaultJobTimeoutSecs: 600
+  putResultRetryIntervalInSecs: 2
+  putResultMaxRetries: 3
+
+
+
+useDotenv: true
 
 
 provider:
@@ -191,8 +198,8 @@ stepFunctions:
                     - ErrorEquals:
                       - DynamoDB.AmazonDynamoDBException
                       - States.ThrottlingException
-                      IntervalSeconds: 2
-                      MaxAttempts: 3
+                      IntervalSeconds: ${self:custom.putResultRetryIntervalInSecs}
+                      MaxAttempts: ${self:custom.putResultMaxRetries}
                       BackoffRate: 2.0
                   End: true
             ResultPath: null
@@ -230,7 +237,15 @@ stepFunctions:
             Comment: Inject completed attribute
             Result:
               completed: true
-            Next: Combine
+            ResultPath: $
+            Next: CheckForErrors
+          CheckForErrors:
+            Type: Choice
+            Choices:
+              - Variable: "$.batchErrors"
+                IsPresent: true
+                Next: CombineError
+            Default: Combine
           Monitor:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
@@ -319,6 +334,7 @@ stepFunctions:
                 batchSize.$: "$$.Execution.Input.batchSize"
                 startTime.$: "$$.Execution.Input.startTime"
                 numBatches.$: "$$.Execution.Input.numBatches"
+                completed.$: "$.completed"
                 jobsTimeoutSecs.$: "$$.Execution.Input.jobsTimeoutSecs"
                 jobParameters.$: "$$.Execution.Input.jobParameters"
                 tasksTableName.$: "$$.Execution.Input.tasksTableName"

@@ -69,7 +69,8 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
     console.log(
       `Partition ${datasetSize} dataset into `,
       `${adjustedNBatches} batches of size ${adjustBatchSize} `,
-      `after caping the number of jobs to ${maxParallelism}`,
+      `after caping the number of jobs to ${maxParallelism} `,
+      `and a branching factor of ${maxBranchingFactor}`,
     );
     return {
       numBatches: adjustedNBatches,
@@ -79,7 +80,8 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   console.log(
     `Partition ${datasetSize} dataset into `,
     `${numBatches} batches of size ${batchSize} `,
-    `using max parallelism ${maxParallelism}`,
+    `using max parallelism ${maxParallelism} `,
+    `and a branching factor of ${maxBranchingFactor}`,
   );
   return {
     numBatches,
