@@ -57,21 +57,30 @@ const putObject = async (Bucket, Key, object) => {
 
 const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   const numBatches = Math.ceil(datasetSize / batchSize);
-  console.log(`Partition ${datasetSize} dataset into ${numBatches} batches of size ${batchSize}`);
+  console.log(
+    `Check if partitioning ${datasetSize} dataset `,
+    `into ${numBatches} batches of size ${batchSize} is valid`,
+  );
 
   if (numBatches > maxParallelism) {
     const adjustBatchSize = Math.ceil(datasetSize / maxBranchingFactor / maxParallelism);
     const adjustedNBatches = Math.ceil(datasetSize / adjustBatchSize);
 
     console.log(
-      `Partition ${datasetSize} dataset into ${adjustedNBatches} batches `,
-      `of size ${adjustBatchSize} after caping the number of jobs to ${maxParallelism}`,
+      `Partition ${datasetSize} dataset into `,
+      `${adjustedNBatches} batches of size ${adjustBatchSize} `,
+      `after caping the number of jobs to ${maxParallelism}`,
     );
     return {
       numBatches: adjustedNBatches,
       batchSize: adjustBatchSize,
     };
   }
+  console.log(
+    `Partition ${datasetSize} dataset into `,
+    `${numBatches} batches of size ${batchSize} `,
+    `using max parallelism ${maxParallelism}`,
+  );
   return {
     numBatches,
     batchSize,
