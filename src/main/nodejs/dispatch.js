@@ -11,13 +11,13 @@ const {
   MAP_JOBS_INPUTS_BUCKET_NAME,
   TASKS_TABLE_NAME,
   DEFAULT_CONCURRENT_JOBS,
-  MAX_BRANCHING_FACTOR,
+  MAX_BATCHED_JOBS_ITERATIONS,
 } = process.env;
 
 const DEFAULTS = {
   level: 0,
   batchSize: 50,
-  maxBranchingFactor: 1,
+  maxBatchedJobsIterations: 1,
   jobParameters: {},
   maxParallelism: 5000,
   toleratedPercentageFailure: 10,
@@ -27,7 +27,8 @@ const s3Client = new S3Client();
 const stepFunctionClient = new SFNClient();
 
 const defaultConcurrentJobs = parseInt(DEFAULT_CONCURRENT_JOBS) || DEFAULTS.maxParallelism;
-const maxBranchingFactor = parseInt(MAX_BRANCHING_FACTOR) || DEFAULTS.maxBranchingFactor;
+const maxBatchedJobsIterations = (parseInt(MAX_BATCHED_JOBS_ITERATIONS)
+                                  || DEFAULTS.maxBatchedJobsIterations);
 
 // Start state machine
 const startStepFunction = async (stateMachineArn, stateMachineParams, uniqueName) => {
@@ -63,14 +64,14 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
   );
 
   if (numBatches > maxParallelism) {
-    const adjustBatchSize = Math.ceil(datasetSize / maxBranchingFactor / maxParallelism);
+    const adjustBatchSize = Math.ceil(datasetSize / maxBatchedJobsIterations / maxParallelism);
     const adjustedNBatches = Math.ceil(datasetSize / adjustBatchSize);
 
     console.log(
       `Partition ${datasetSize} dataset into `,
       `${adjustedNBatches} batches of size ${adjustBatchSize} `,
       `after caping the number of jobs to ${maxParallelism} `,
-      `and a branching factor of ${maxBranchingFactor}`,
+      `and ${maxBatchedJobsIterations} batch iterations`,
     );
     return {
       numBatches: adjustedNBatches,
@@ -81,7 +82,7 @@ const computeNumBatches = (batchSize, datasetSize, maxParallelism) => {
     `Partition ${datasetSize} dataset into `,
     `${numBatches} batches of size ${batchSize} `,
     `using max parallelism ${maxParallelism} `,
-    `and a branching factor of ${maxBranchingFactor}`,
+    `and ${maxBatchedJobsIterations} batch iterations`,
   );
   return {
     numBatches,

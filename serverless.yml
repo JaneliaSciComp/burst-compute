@@ -21,7 +21,7 @@ custom:
   mapJobsInputsBucketName: ${self:custom.org}-${self:service}-${self:provider.stage}-mapjobsinputs
   stateMachine: ${self:custom.org}-${self:service}-${self:provider.stage}-lifecycle
   maxConcurrentJobs: ${env:MAX_PARALLELISM, 5000}
-  maxBranchingFactor: ${env:MAX_BRANCHING_FACTOR, 2}
+  maxBatchedJobsIterations: ${env:MAX_BATCHED_JOBS_ITERATIONS, 2}
   defaultJobTimeoutSecs: 600
   putResultRetryIntervalInSecs: 2
   putResultMaxRetries: 3
@@ -96,7 +96,7 @@ functions:
       DEBUG: ${self:custom.debug}
       JOB_TIMEOUT_SECS: ${self:custom.defaultJobTimeoutSecs}
       DEFAULT_CONCURRENT_JOBS: ${self:custom.maxConcurrentJobs}
-      MAX_BRANCHING_FACTOR: ${self:custom.maxBranchingFactor}
+      MAX_BATCHED_JOBS_ITERATIONS: ${self:custom.maxBatchedJobsIterations}
       DISPATCH_FUNCTION_NAME: ${self:custom.dispatchNextBatchesFunctionName}
       MONITOR_FUNCTION_NAME: ${self:custom.monitorFunctionName}
       STATE_MACHINE_ARN: ${self:resources.Outputs.JobLifecycleStateMachine.Value}
