@@ -16,14 +16,14 @@ In the diagram below, the code you write is indicated by the blue lambda icons.
 Here's how it works, step-by-step:
 1) You define a **worker** function and a **combiner** function
 2) Launch your burst compute job by calling the **dispatch** function with a range of items to process
-3) The dispatcher will start copies of itself recursively and efficiently start your worker lambdas
-4) Each **worker** is given a range of inputs and must compute results for those inputs and write results to DynamoDB
-5) The Step Function monitors all the results and calls the combiner function when all workers are done
-6) The **combiner** function reads all output from DynamoDB and aggregates them into the final result
+3) The dispatcher partitions the work into batches and starts an AWS Step Function that implements a map-reduce workflow.
+4) The Step Function maps all the batches to workers, where each **worker** is given a range of inputs, computes the results for those inputs and then sends them to another workflow task that persists these results to a DynamoDB table.
+5) When all wotkers complete and their results are persisted to the database, the Step Function invokes the **combiner** that reads all outputs from the DynamoDB table and aggregates them into the final result.
+6) The Step Function also monitors for a timeout and terminates the process if the time configured time limit is reached.
 
 ## Build
 
-You need Node.js 12.x or later in your path, then:
+You need Node.js 20.x or later in your path, then:
 
 ```bash
 npm install
@@ -40,12 +40,15 @@ To deploy to the *dev* stage:
 npm run sls -- deploy
 ```
 
-This will create a application stack named `burst-compute-dev`. 
+This will create an application stack named `janelia-burst-compute-dev`. 
 
-To deploy to a different stage (e.g. "prod"), add a stage argument:
+To deploy to a different stage (e.g. "prod") and a different organization (the default organtization is 'janelia'), add a stage and an org argument:
 ```bash
-npm run sls -- deploy -s prod
+npm run sls -- deploy -s prod --org myorg
 ```
+
+This will create an application stack named
+`myorg-burst-compute-dev`
 
 ## Usage
 
