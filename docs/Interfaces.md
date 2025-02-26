@@ -88,7 +88,7 @@ This function will requires dynamodb:Query permission to the **TasksTable**:
     "Action": [
         "dynamodb:Query"
     ],
-    "Resource": "arn:aws:dynamodb:<REGION>:*:table/burst-compute-<STAGE>-tasks",
+    "Resource": "arn:aws:dynamodb:<REGION>:*:table/<ORG>-burst-compute-<STAGE>-tasks",
     "Effect": "Allow"
 },
 ```
